@@ -1,0 +1,43 @@
+const sessionsRepo = require('../repositories/parking_sessions.repository')
+
+// ─── Parking history for user (with date filter) ──────────────────────────────
+
+const getHistory = async (userId, { limit = 20, offset = 0, startDate, endDate } = {}) => {
+  const rows = await sessionsRepo.findByUser(userId, { limit, offset, startDate, endDate })
+  return rows.map(formatSession)
+}
+
+// ─── Today's sessions ─────────────────────────────────────────────────────────
+
+const getTodaySessions = async (userId) => {
+  const rows = await sessionsRepo.findTodayByUser(userId)
+  return rows.map(formatSession)
+}
+
+// ─── Duration formatter ───────────────────────────────────────────────────────
+
+const formatDuration = (minutes) => {
+  if (!minutes && minutes !== 0) return null
+  const totalMins = Math.round(Number(minutes))
+  const d = Math.floor(totalMins / (60 * 24))
+  const h = Math.floor((totalMins % (60 * 24)) / 60)
+  const m = totalMins % 60
+  return `${String(d).padStart(2, '0')}d ${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`
+}
+
+// ─── Format session ───────────────────────────────────────────────────────────
+
+const formatSession = (row) => ({
+  id:           row.id,
+  numberPlate:  row.number_plate,
+  vehicleName:  row.vehicle_name,
+  vehicleModel: row.vehicle_model,
+  vehicleType:  row.vehicle_type,
+  entryTime:    row.entry_time,
+  exitTime:     row.exit_time,
+  status:       row.status,
+  durationMinutes: Math.round(Number(row.duration_minutes_calc)) || null,
+  durationFormatted: formatDuration(row.duration_minutes_calc),
+})
+
+module.exports = { getHistory, getTodaySessions }

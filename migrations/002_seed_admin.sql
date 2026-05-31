@@ -1,0 +1,30 @@
+-- ============================================================
+--  Seed — Admin account bootstrap
+--
+--  ⚠️  DO NOT run this file directly on Railway.
+--
+--  The admin account uses bcrypt + AES-256 encryption so it
+--  CANNOT be seeded with plain SQL — the hashing/encryption
+--  requires your ENCRYPTION_KEY and ENCRYPTION_IV env vars.
+--
+--  Instead, after running 001_init.sql, bootstrap the admin
+--  by running the seed script from your local machine:
+--
+--    1. Make sure your .env points to the Railway DB:
+--       DB_HOST=<Railway PGHOST>
+--       DB_PORT=<Railway PGPORT>
+--       DB_NAME=<Railway PGDATABASE>
+--       DB_USER=<Railway PGUSER>
+--       DB_PASSWORD=<Railway PGPASSWORD>
+--       ENCRYPTION_KEY=<your production key>
+--       ENCRYPTION_IV=<your production IV>
+--       ADMIN_USERNAME=<your admin username>
+--       ADMIN_PASSWORD=<your admin password>
+--       ADMIN_PHONE=<your phone>
+--
+--    2. Run:
+--       node database/seed.js
+--
+--  This will create the encrypted admin account in the Railway DB.
+--  If the admin already exists it will skip safely.
+-- ============================================================

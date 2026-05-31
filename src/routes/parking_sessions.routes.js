@@ -1,0 +1,17 @@
+const { Router } = require('express');
+const ctrl     = require('../controllers/parking_sessions.controller');
+const { authenticate } = require('../middlewares/auth.middleware');
+const { authorize }    = require('../middlewares/rbac.middleware');
+const { auditLog }     = require('../middlewares/audit.middleware');
+
+const router = Router();
+router.use(authenticate, authorize('admin'));
+
+router.get('/active',  ctrl.listActive);          // before /:id
+router.get('/lookup',  ctrl.lookup);              // before /:id
+router.get('/',        ctrl.list);
+router.get('/:id',     ctrl.getById);
+router.post('/entry',  auditLog('VEHICLE_ENTRY', 'parking_session'), ctrl.entry);
+router.post('/exit',   auditLog('VEHICLE_EXIT',  'parking_session'), ctrl.exit);
+
+module.exports = router;

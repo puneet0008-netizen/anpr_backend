@@ -1,0 +1,20 @@
+const { Schema, model } = require('mongoose');
+
+const schema = new Schema({
+  _id:             { type: String },           // UUID
+  vehicleId:       { type: String, ref: 'AppVehicle', default: null },
+  userId:          { type: String, ref: 'ParkingUser', default: null },
+  siteId:          { type: String, ref: 'ParkingSite', default: null },
+  numberPlate:     { type: String },
+  vehicleName:     { type: String },
+  vehicleModel:    { type: String },
+  vehicleType:     { type: String },
+  entryTime:       { type: Date, default: Date.now },
+  exitTime:        { type: Date },
+  durationMinutes: { type: Number },
+  fee:             { type: Number, default: 0 },
+  status:          { type: String, default: 'active' },
+  createdAt:       { type: Date, default: Date.now },
+}, { _id: false, id: false, versionKey: false });
+
+module.exports = model('ParkingSession', schema);
