@@ -22,7 +22,6 @@ const corsOptions = {
   origin:         process.env.CORS_ORIGIN || '*',
   methods:        ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization'],
-  credentials:    true,
 };
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // handle preflight for all routes
