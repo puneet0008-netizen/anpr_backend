@@ -1,4 +1,5 @@
-const notifRepo = require('../repositories/notifications.repository')
+const notifRepo        = require('../repositories/notifications.repository')
+const deviceTokensRepo = require('../repositories/device_tokens.repository')
 
 // ─── List ─────────────────────────────────────────────────────────────────────
 
@@ -24,4 +25,21 @@ const markAllRead = async (userId) => {
   await notifRepo.markAllRead(userId)
 }
 
-module.exports = { getNotifications, getUnreadCount, markRead, markAllRead }
+// ─── Device token (FCM) ───────────────────────────────────────────────────────
+
+const registerDeviceToken = async (userId, { token, platform, deviceId }) => {
+  return deviceTokensRepo.upsert({ userId, token, platform, deviceId: deviceId || null })
+}
+
+const removeDeviceToken = async (userId, token) => {
+  await deviceTokensRepo.removeToken(userId, token)
+}
+
+module.exports = {
+  getNotifications,
+  getUnreadCount,
+  markRead,
+  markAllRead,
+  registerDeviceToken,
+  removeDeviceToken,
+}

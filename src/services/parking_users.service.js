@@ -75,10 +75,10 @@ const createUser = async (type, d) => {
   const allottedSlots  = d.allottedSlots   || 1;
   const user = await repo.create({ type, name: d.name, email: d.email, phone: d.phone, vehicleNumber, passwordHash, vendorId, assignedSiteId, slotNumber, allottedSlots });
 
-  if (type === 'app') await repo.createWallet(user.id);
+  if (type === 'app') await repo.createWallet(user._id);
 
   if (d.numberPlate) {
-    await repo.addVehicle(user.id, {
+    await repo.addVehicle(user._id, {
       numberPlate:  d.numberPlate,
       vehicleType:  d.vehicleType  || 'four_wheeler',
       vehicleName:  d.vehicleName  || `${d.name}'s vehicle`,
@@ -86,7 +86,7 @@ const createUser = async (type, d) => {
     });
   }
 
-  const row = await repo.findById(user.id);
+  const row = await repo.findById(user._id);
   return { data: formatUser(row), success: true };
 };
 

@@ -40,4 +40,22 @@ const markAllRead = async (req, res, next) => {
   }
 }
 
-module.exports = { list, unreadCount, markRead, markAllRead }
+const registerDeviceToken = async (req, res, next) => {
+  try {
+    const data = await notifService.registerDeviceToken(req.appUser.id, req.body)
+    return sendSuccess(res, { message: 'Device token registered', data })
+  } catch (err) {
+    next(err)
+  }
+}
+
+const removeDeviceToken = async (req, res, next) => {
+  try {
+    await notifService.removeDeviceToken(req.appUser.id, req.body.token)
+    return sendSuccess(res, { message: 'Device token removed' })
+  } catch (err) {
+    next(err)
+  }
+}
+
+module.exports = { list, unreadCount, markRead, markAllRead, registerDeviceToken, removeDeviceToken }

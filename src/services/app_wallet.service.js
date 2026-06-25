@@ -1,7 +1,7 @@
 const { v4: uuidv4 } = require('uuid')
 const walletRepo  = require('../repositories/wallet.repository')
 const usersRepo   = require('../repositories/parking_users.repository')
-const notifRepo   = require('../repositories/notifications.repository')
+const { sendAppNotification } = require('./notification_dispatch.service')
 const { getIO }   = require('../sockets')
 
 const err = (msg, code) => Object.assign(new Error(msg), { statusCode: code })
@@ -43,14 +43,12 @@ const recharge = async (userId, { amount, paymentMethod = 'UPI' }) => {
   const record = await walletRepo.recharge(userId, amount, paymentMethod, transactionRef)
   const wallet = await walletRepo.findByUser(userId)
 
-  const notif = await notifRepo.create({
-    userId,
+  await sendAppNotification(userId, {
     title:   'Wallet Recharged',
     message: `₹${amount} has been added to your wallet. New balance: ₹${parseFloat(wallet.balance).toFixed(2)}.`,
     type:    'wallet_recharge',
     data:    { amount, transactionRef, balance: parseFloat(wallet.balance) },
   })
-  try { getIO().to(`user:${userId}`).emit('notification:new', notif) } catch {}
   try { getIO().to(`user:${userId}`).emit('wallet:recharged', { amount, balance: parseFloat(wallet.balance), transactionRef }) } catch {}
 
   return {

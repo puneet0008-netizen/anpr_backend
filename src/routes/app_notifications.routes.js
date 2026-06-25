@@ -1,9 +1,14 @@
 const { Router } = require('express')
 const ctrl = require('../controllers/app_notifications.controller')
 const { appAuthenticate } = require('../middlewares/app_authenticate.middleware')
+const { validate } = require('../middlewares/validate.middleware')
+const { registerDeviceTokenSchema, removeDeviceTokenSchema } = require('../validators/app.validator')
 
 const router = Router()
 router.use(appAuthenticate)
+
+router.post('/device-token', validate(registerDeviceTokenSchema), ctrl.registerDeviceToken)
+router.delete('/device-token', validate(removeDeviceTokenSchema), ctrl.removeDeviceToken)
 
 /**
  * @swagger

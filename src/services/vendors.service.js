@@ -73,27 +73,24 @@ const createVendor = async (d, creatorId) => {
   if (d.assignedSiteId === '') d.assignedSiteId = null;
 
   // ── Create login account for the vendor ────────────────────────────────────
-  let accountId = null;
-  if (d.password) {
-    const username     = d.email;                      // use email as login username
-    const usernameHash = hmac(username);
-    if (await accountRepo.existsByUsernameHash(usernameHash)) throw err('Email already registered as an account', 409);
+  const username     = d.email;                      // use email as login username
+  const usernameHash = hmac(username);
+  if (await accountRepo.existsByUsernameHash(usernameHash)) throw err('Email already registered as an account', 409);
 
-    const roleId       = await accountRepo.getRoleId('vendor');
-    const passwordHash = await bcrypt.hash(d.password, SALT_ROUNDS);
+  const roleId       = await accountRepo.getRoleId('vendor');
+  const passwordHash = await bcrypt.hash(d.password, SALT_ROUNDS);
 
-    const account = await accountRepo.create({
-      id:                uuidv4(),
-      roleId,
-      usernameEncrypted: encrypt(username),
-      usernameHash,
-      passwordHash,
-      phoneEncrypted:    encrypt(d.phone || ''),
-      phoneHash:         hmac(d.phone || ''),
-      createdBy:         creatorId || null,
-    });
-    accountId = account.id;
-  }
+  const account = await accountRepo.create({
+    id:                uuidv4(),
+    roleId,
+    usernameEncrypted: encrypt(username),
+    usernameHash,
+    passwordHash,
+    phoneEncrypted:    encrypt(d.phone || ''),
+    phoneHash:         hmac(d.phone || ''),
+    createdBy:         creatorId || null,
+  });
+  const accountId = account.id;
 
   const row = await repo.create({ ...d, accountId });
   // Sync: mark the allocated parking site's assigned_vendor_id

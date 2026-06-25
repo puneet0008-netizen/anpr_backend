@@ -53,6 +53,11 @@ const findSiteById = async (id) => {
   return _enrichSite(doc);
 };
 
+const findSiteByName = async (name) => {
+  const escaped = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return ParkingSite.findOne({ siteName: new RegExp(`^${escaped}$`, 'i') }).lean();
+};
+
 const createSite = async (d) => {
   const doc = new ParkingSite({
     _id:                 uuidv4(),
@@ -177,6 +182,7 @@ const findDropdown = async () => {
 module.exports = {
   findAllSites,
   findSiteById,
+  findSiteByName,
   findDropdown,
   createSite,
   updateSiteById,

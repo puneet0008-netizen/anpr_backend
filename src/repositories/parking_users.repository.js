@@ -57,7 +57,12 @@ const findByEmail = async (email) => {
 };
 
 const findByVehicle = async (vehicleNumber) => {
-  return ParkingUser.findOne({ vehicleNumber }).lean();
+  const normalized = vehicleNumber.toUpperCase().trim();
+  const escaped    = normalized.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return ParkingUser.findOne({
+    vehicleNumber: new RegExp(`^${escaped}$`, 'i'),
+    status:        'active',
+  }).lean();
 };
 
 const search = async (q) => {

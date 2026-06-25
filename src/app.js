@@ -28,8 +28,8 @@ app.options('*', cors(corsOptions)); // handle preflight for all routes
 
 // ── Perf / Parsing ────────────────────────────────────────────────────────────
 app.use(compression());
-app.use(express.json({ limit: '10kb' }));
-app.use(express.urlencoded({ extended: true, limit: '10kb' }));
+app.use(express.json({ limit: '15mb' }));
+app.use(express.urlencoded({ extended: true, limit: '15mb' }));
 
 // ── HTTP request logging ─────────────────────────────────────────────────────
 if (process.env.NODE_ENV !== 'test') {

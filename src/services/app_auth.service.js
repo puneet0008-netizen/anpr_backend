@@ -19,16 +19,16 @@ const login = async ({ email, password }, { ip, userAgent } = {}) => {
   if (!user) throw err('Invalid email or password', 401)
   if (user.status !== 'active') throw err('Account is inactive or suspended', 403)
 
-  const valid = await bcrypt.compare(password, user.password_hash)
+  const valid = await bcrypt.compare(password, user.passwordHash)
   if (!valid) throw err('Invalid email or password', 401)
 
-  const payload = { id: user.id, role: 'app_user' }
+  const payload = { id: user._id, role: 'app_user' }
   const accessToken  = signAccessToken(payload)
   const refreshToken = signRefreshToken(payload)
   const tokenHash    = hashRefreshToken(refreshToken)
 
   await tokensRepo.create({
-    userId:    user.id,
+    userId:    user._id,
     tokenHash,
     expiresAt: refreshTokenExpiresAt(),
     ip,
@@ -88,14 +88,14 @@ const logoutAll = async (userId) => {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 const formatUser = (u) => ({
-  id:       u.id,
-  name:     u.name,
-  email:    u.email,
-  phone:    u.phone,
-  username: u.username || null,
-  profilePhoto: u.profile_photo_url || null,
-  status:   u.status,
-  joinedAt: u.joined_at,
+  id:           u._id,
+  name:         u.name,
+  email:        u.email,
+  phone:        u.phone,
+  username:     u.username || null,
+  profilePhoto: u.profilePhoto || null,
+  status:       u.status,
+  joinedAt:     u.joinedAt,
 })
 
 module.exports = { login, refresh, logout, logoutAll }

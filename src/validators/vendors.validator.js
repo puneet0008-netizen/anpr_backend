@@ -16,7 +16,7 @@ const createVendorSchema = Joi.object({
                         .messages({ 'string.isoDate': 'contractStartDate must be a valid date (YYYY-MM-DD)' }),
   notes:              Joi.string().trim().max(2000).allow('', null).optional(),
   assignedSiteId:     Joi.string().uuid().allow('', null).optional(),
-  password:           Joi.string().min(6).max(100).allow('', null).optional()
+  password:           Joi.string().min(6).max(100).required()
                         .messages({ 'string.min': 'Password must be at least 6 characters' }),
 });
 

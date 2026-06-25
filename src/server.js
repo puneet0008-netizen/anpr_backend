@@ -3,6 +3,7 @@ require('dotenv').config();
 const http   = require('http');
 const app    = require('./app');
 const { initSocket }    = require('./sockets');
+const { initFirebase }  = require('./config/firebase');
 const db                = require('./config/database');
 const { getRedisClient } = require('./config/redis');
 const logger            = require('./utils/logger');
@@ -13,6 +14,7 @@ const server = http.createServer(app);
 
 // Attach Socket.IO
 initSocket(server);
+initFirebase();
 
 // ── Startup ───────────────────────────────────────────────────────────────────
 const start = async () => {

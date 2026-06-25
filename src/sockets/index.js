@@ -56,6 +56,7 @@ const initSocket = (httpServer) => {
     }
     if (role === 'app_user') {
       socket.join(`user:${id}`);         // app user – same room convention for notifications
+      require('./parkingStatus').registerParkingStatusHandlers(socket);
     }
 
     socket.emit('connected', {

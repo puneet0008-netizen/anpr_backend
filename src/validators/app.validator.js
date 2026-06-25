@@ -64,6 +64,16 @@ const inviteVisitorSchema = Joi.object({
   durationMinutes: Joi.number().integer().min(0).max(59).default(0),
 })
 
+const registerDeviceTokenSchema = Joi.object({
+  token:    Joi.string().min(10).required(),
+  platform: Joi.string().valid('android', 'ios', 'web').default('android'),
+  deviceId: Joi.string().max(255).allow(null, ''),
+})
+
+const removeDeviceTokenSchema = Joi.object({
+  token: Joi.string().min(10).required(),
+})
+
 module.exports = {
   loginSchema,
   refreshSchema,
@@ -74,4 +84,6 @@ module.exports = {
   removeVehicleSchema,
   rechargeSchema,
   inviteVisitorSchema,
+  registerDeviceTokenSchema,
+  removeDeviceTokenSchema,
 }

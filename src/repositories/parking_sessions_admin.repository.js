@@ -41,18 +41,26 @@ const listAll = async ({ numberPlate, userId, siteId, status, startDate, endDate
   return { rows, total };
 };
 
-const recordEntry = async ({ numberPlate, vehicleId, userId, siteId, vehicleName, vehicleModel, vehicleType }) => {
+const recordEntry = async ({
+  numberPlate, vehicleId, userId, siteId, parkingName,
+  vehicleName, vehicleModel, vehicleType, isMonthly,
+  entryPlateImageUrl, entryCarImageUrl,
+}) => {
   const doc = new ParkingSession({
-    _id:         uuidv4(),
-    numberPlate: numberPlate.toUpperCase(),
-    vehicleId:   vehicleId || null,
-    userId:      userId    || null,
-    siteId:      siteId    || null,
-    vehicleName: vehicleName  || null,
-    vehicleModel:vehicleModel || null,
-    vehicleType: vehicleType  || null,
-    entryTime:   new Date(),
-    status:      'active',
+    _id:                uuidv4(),
+    numberPlate:        numberPlate.toUpperCase(),
+    parkingName:        parkingName || null,
+    vehicleId:          vehicleId || null,
+    userId:             userId    || null,
+    siteId:             siteId    || null,
+    vehicleName:        vehicleName  || null,
+    vehicleModel:       vehicleModel || null,
+    vehicleType:        vehicleType  || null,
+    isMonthly:          isMonthly === true,
+    entryPlateImageUrl: entryPlateImageUrl || null,
+    entryCarImageUrl:   entryCarImageUrl   || null,
+    entryTime:          new Date(),
+    status:             'active',
   });
   await doc.save();
   // Increment site occupancy counter
@@ -62,15 +70,23 @@ const recordEntry = async ({ numberPlate, vehicleId, userId, siteId, vehicleName
   return doc.toObject();
 };
 
-const recordExit = async (sessionId) => {
+const recordExit = async (sessionId, { exitPlateImageUrl, exitCarImageUrl } = {}) => {
   const exitTime = new Date();
   const session  = await ParkingSession.findById(sessionId).lean();
   if (!session || session.status !== 'active') return null;
 
   const durationMinutes = Math.round((exitTime - session.entryTime) / 60000);
+  const update = {
+    exitTime,
+    durationMinutes,
+    status: 'completed',
+  };
+  if (exitPlateImageUrl) update.exitPlateImageUrl = exitPlateImageUrl;
+  if (exitCarImageUrl)   update.exitCarImageUrl   = exitCarImageUrl;
+
   const updated = await ParkingSession.findByIdAndUpdate(
     sessionId,
-    { $set: { exitTime, durationMinutes, status: 'completed' } },
+    { $set: update },
     { new: true }
   ).lean();
 

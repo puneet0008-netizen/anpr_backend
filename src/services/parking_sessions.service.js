@@ -1,8 +1,11 @@
 const repo         = require('../repositories/parking_sessions_admin.repository');
 const vehiclesRepo = require('../repositories/app_vehicles.repository');
 const usersRepo    = require('../repositories/parking_users.repository');
+const parkingRepo  = require('../repositories/parking.repository');
+const { saveBase64Image } = require('../utils/imageStorage');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { cacheDel } = require('../config/redis');
+const { notifyParkingStatusForSession } = require('../sockets/parkingStatus');
 
 const err = (msg, code) => Object.assign(new Error(msg), { statusCode: code });
 
@@ -15,24 +18,33 @@ const formatDuration = (minutes) => {
   return `${String(d).padStart(2,'0')}d ${String(h).padStart(2,'0')}h ${String(min).padStart(2,'0')}m`;
 };
 
-const formatSession = (row) => ({
-  id:              row.id,
-  numberPlate:     row.number_plate,
-  vehicleName:     row.vehicle_name,
-  vehicleModel:    row.vehicle_model,
-  vehicleType:     row.vehicle_type,
-  userId:          row.user_id,
-  userName:        row.user_name || null,
-  userPhone:       row.user_phone || null,
-  siteId:          row.site_id,
-  entryTime:       row.entry_time,
-  exitTime:        row.exit_time || null,
-  durationMinutes: row.duration_minutes_calc ? Math.round(Number(row.duration_minutes_calc)) : null,
-  durationFormatted: formatDuration(row.duration_minutes_calc),
-  status:          row.status,
-  fee:             parseFloat(row.fee) || 0,
-  createdAt:       row.created_at,
-});
+const formatSession = (row) => {
+  const duration = row.duration_minutes_calc ?? row.durationMinutes;
+  return {
+    id:                 row._id || row.id,
+    numberPlate:        row.numberPlate || row.number_plate,
+    parkingName:        row.parkingName || null,
+    vehicleName:        row.vehicleName || row.vehicle_name || null,
+    vehicleModel:       row.vehicleModel || row.vehicle_model || null,
+    vehicleType:        row.vehicleType || row.vehicle_type || null,
+    userId:             row.userId || row.user_id || null,
+    userName:           row.user_name || null,
+    userPhone:          row.user_phone || null,
+    siteId:             row.siteId || row.site_id || null,
+    entryTime:          row.entryTime || row.entry_time,
+    exitTime:           row.exitTime || row.exit_time || null,
+    durationMinutes:    duration != null ? Math.round(Number(duration)) : null,
+    durationFormatted:  formatDuration(duration),
+    status:             row.status,
+    fee:                parseFloat(row.fee) || 0,
+    isMonthly:          row.isMonthly === true,
+    entryPlateImageUrl: row.entryPlateImageUrl || null,
+    entryCarImageUrl:   row.entryCarImageUrl || null,
+    exitPlateImageUrl:  row.exitPlateImageUrl || null,
+    exitCarImageUrl:    row.exitCarImageUrl || null,
+    createdAt:          row.createdAt || row.created_at,
+  };
+};
 
 const listSessions = async (query) => {
   const { page, limit, offset } = parsePagination(query);
@@ -55,52 +67,106 @@ const getActiveSessions = async () => {
 };
 
 const recordEntry = async (d) => {
-  const plate = (d.numberPlate || '').toUpperCase().trim();
-  if (!plate) throw err('numberPlate is required', 400);
+  const plate       = (d.platenumber || d.numberPlate || '').toUpperCase().trim();
+  const parkingName = (d.parking_name || d.parkingName || '').trim();
+  const direction   = (d.status || '').toUpperCase();
 
-  // Check if already parked
-  const existing = await repo.findActiveByPlate(plate);
-  if (existing) throw err(`Vehicle ${plate} is already parked (session: ${existing.id})`, 409);
+  if (!plate) throw err('platenumber is required', 400);
+  if (!parkingName) throw err('parking_name is required', 400);
+  if (!['IN', 'OUT'].includes(direction)) throw err('status must be IN or OUT', 400);
 
-  // Auto-look up vehicle and user if plate is registered
-  let vehicleId = d.vehicleId || null;
-  let userId    = d.userId    || null;
-  let vehicleName  = d.vehicleName  || null;
-  let vehicleModel = d.vehicleModel || null;
-  let vehicleType  = d.vehicleType  || null;
+  const site   = await parkingRepo.findSiteByName(parkingName);
+  const siteId = site?._id || null;
 
-  if (!vehicleId) {
+  const plateImageUrl = saveBase64Image(d.plate_image || d.plateImage, 'plates');
+  const carImageUrl   = saveBase64Image(d.car_image || d.carImage, 'cars');
+
+  if (direction === 'IN') {
+    const existing = await repo.findActiveByPlate(plate);
+    if (existing) throw err(`Vehicle ${plate} is already parked (session: ${existing._id || existing.id})`, 409);
+
+    let vehicleId    = d.vehicleId || null;
+    let userId       = null;
+    let vehicleName  = d.vehicleName  || null;
+    let vehicleModel = d.vehicleModel || null;
+    let vehicleType  = d.vehicleType  || null;
+
     const vehicle = await vehiclesRepo.findByPlate(plate);
     if (vehicle) {
-      vehicleId    = vehicle.id;
-      userId       = vehicle.user_id;
-      vehicleName  = vehicleName  || vehicle.vehicle_name;
-      vehicleModel = vehicleModel || vehicle.vehicle_model;
-      vehicleType  = vehicleType  || vehicle.vehicle_type;
+      vehicleId    = vehicleId || vehicle._id;
+      userId       = vehicle.userId || null;
+      vehicleName  = vehicleName  || vehicle.vehicleName;
+      vehicleModel = vehicleModel || vehicle.vehicleModel;
+      vehicleType  = vehicleType  || vehicle.vehicleType;
     }
+
+    const parkingUser = await usersRepo.findByVehicle(plate);
+    const isMonthly   = !!parkingUser;
+    if (parkingUser) {
+      userId = userId || parkingUser._id;
+    }
+
+    const session = await repo.recordEntry({
+      numberPlate: plate,
+      vehicleId,
+      userId,
+      siteId,
+      parkingName,
+      vehicleName,
+      vehicleModel,
+      vehicleType,
+      isMonthly,
+      entryPlateImageUrl: plateImageUrl,
+      entryCarImageUrl:   carImageUrl,
+    });
+
+    await cacheDel('parking:stats');
+    await notifyParkingStatusForSession(session, 'IN');
+    return { data: formatSession(session), success: true };
   }
 
-  const session = await repo.recordEntry({ numberPlate: plate, vehicleId, userId, siteId: d.siteId || null, vehicleName, vehicleModel, vehicleType });
+  // OUT
+  const active = await repo.findActiveByPlate(plate);
+  if (!active) throw err(`No active parking session found for plate ${plate}`, 404);
+
+  const sessionId = active._id || active.id;
+  const session   = await repo.recordExit(sessionId, {
+    exitPlateImageUrl: plateImageUrl,
+    exitCarImageUrl:   carImageUrl,
+  });
+  if (!session) throw err('Session not found or already completed', 404);
+
   await cacheDel('parking:stats');
-  return { data: formatSession(session), success: true };
+  const enriched = await repo.findById(sessionId);
+  await notifyParkingStatusForSession(enriched || session, 'OUT');
+  return { data: formatSession(enriched || session), success: true };
 };
 
 const recordExit = async (d) => {
   let sessionId = d.sessionId;
 
-  // If sessionId not provided, find active session by plate
   if (!sessionId) {
-    const plate = (d.numberPlate || '').toUpperCase().trim();
+    const plate = (d.numberPlate || d.platenumber || '').toUpperCase().trim();
     if (!plate) throw err('Either sessionId or numberPlate is required', 400);
     const active = await repo.findActiveByPlate(plate);
     if (!active) throw err(`No active parking session found for plate ${plate}`, 404);
-    sessionId = active.id;
+    sessionId = active._id || active.id;
   }
 
-  const session = await repo.recordExit(sessionId);
+  const exitImages = {};
+  if (d.plate_image || d.plateImage) {
+    exitImages.exitPlateImageUrl = saveBase64Image(d.plate_image || d.plateImage, 'plates');
+  }
+  if (d.car_image || d.carImage) {
+    exitImages.exitCarImageUrl = saveBase64Image(d.car_image || d.carImage, 'cars');
+  }
+
+  const session = await repo.recordExit(sessionId, exitImages);
   if (!session) throw err('Session not found or already completed', 404);
   await cacheDel('parking:stats');
-  return { data: formatSession(session), success: true };
+  const enriched = await repo.findById(sessionId);
+  await notifyParkingStatusForSession(enriched || session, 'OUT');
+  return { data: formatSession(enriched || session), success: true };
 };
 
 const getSessionById = async (id) => {
@@ -113,30 +179,27 @@ const lookupByPlate = async (plate) => {
   if (!plate) throw err('plate is required', 400);
   const normalized = plate.toUpperCase().trim();
 
-  // Check if currently parked
   const activeSession = await repo.findActiveByPlate(normalized);
-
-  // Look up registered vehicle + owner
   const vehicle = await vehiclesRepo.findByPlate(normalized);
   let user = null;
-  if (vehicle?.user_id) {
-    user = await usersRepo.findById(vehicle.user_id);
+  if (vehicle?.userId) {
+    user = await usersRepo.findById(vehicle.userId);
   }
 
   return {
     data: {
       plate: normalized,
       isAlreadyParked: !!activeSession,
-      activeSessionId: activeSession?.id || null,
+      activeSessionId: activeSession?._id || activeSession?.id || null,
       registered: !!vehicle,
       vehicle: vehicle ? {
-        id:           vehicle.id,
-        vehicleName:  vehicle.vehicle_name,
-        vehicleModel: vehicle.vehicle_model,
-        vehicleType:  vehicle.vehicle_type,
+        id:           vehicle._id,
+        vehicleName:  vehicle.vehicleName,
+        vehicleModel: vehicle.vehicleModel,
+        vehicleType:  vehicle.vehicleType,
       } : null,
       user: user ? {
-        id:    user.id,
+        id:    user._id,
         name:  user.name,
         phone: user.phone,
         email: user.email,
