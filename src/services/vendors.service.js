@@ -12,34 +12,36 @@ const SALT_ROUNDS = 12;
 const err = (msg, code) => Object.assign(new Error(msg), { statusCode: code });
 
 const formatVendor = (row) => row ? {
-  id:                  row.id,
-  vendorName:          row.vendor_name,
-  contactPerson:       row.contact_person,
+  id:                  row.id || row._id,
+  vendorName:          row.vendorName ?? row.vendor_name,
+  contactPerson:       row.contactPerson ?? row.contact_person,
   phone:               row.phone,
   email:               row.email,
   city:                row.city,
   state:               row.state,
   gstin:               row.gstin,
-  registeredAddress:   row.registered_address,
-  primaryService:      row.primary_service,
-  contractStartDate:   row.contract_start_date,
+  registeredAddress:   row.registeredAddress ?? row.registered_address,
+  primaryService:      row.primaryService ?? row.primary_service,
+  contractStartDate:   row.contractStartDate ?? row.contract_start_date,
   notes:               row.notes,
   status:              row.status,
-  lastOrderDate:       row.last_order_date,
-  itemsCount:          parseInt(row.items_count) || 0,
-  contractsCount:      parseInt(row.contracts_count) || 0,
-  assignedSiteId:       row.assigned_site_id,
-  assignedSiteName:     row.assigned_site_name || null,
-  assignedParkingSites: row.assigned_parking_sites || [],
+  lastOrderDate:       row.lastOrderDate ?? row.last_order_date,
+  itemsCount:          parseInt(row.items_count ?? row.itemsCount) || 0,
+  contractsCount:      parseInt(row.contracts_count ?? row.contractsCount) || 0,
+  assignedSiteId:      row.assignedSiteId ?? row.assigned_site_id,
+  assignedSiteName:    row.assigned_site_name ?? row.assignedSiteName ?? null,
+  assignedParkingSites: row.assigned_parking_sites ?? row.assignedParkingSites ?? [],
   cameraIds:           [],
   contractDocuments:   [],
-  createdAt:           row.created_at,
-  updatedAt:           row.updated_at,
+  createdAt:           row.createdAt ?? row.created_at,
+  updatedAt:           row.updatedAt ?? row.updated_at,
 } : null;
+
+const CACHE_VERSION = 'v2';
 
 const listVendors = async (query) => {
   const { page, limit, offset, sortBy, sortOrder, search } = parsePagination(query);
-  const cacheKey = `vendors:list:${JSON.stringify({ page, limit, sortBy, sortOrder, search, status: query.status })}`;
+  const cacheKey = `vendors:list:${CACHE_VERSION}:${JSON.stringify({ page, limit, sortBy, sortOrder, search, status: query.status })}`;
   const cached = await cacheGet(cacheKey);
   if (cached) return cached;
 
@@ -50,21 +52,28 @@ const listVendors = async (query) => {
 };
 
 const getVendorById = async (id) => {
-  const cached = await cacheGet(`vendor:${id}`);
+  const cacheKey = `vendor:${CACHE_VERSION}:${id}`;
+  const cached = await cacheGet(cacheKey);
   if (cached) return cached;
   const row = await repo.findById(id);
   if (!row) throw err('Vendor not found', 404);
   const result = { data: formatVendor(row), success: true };
-  await cacheSet(`vendor:${id}`, result, 300);
+  await cacheSet(cacheKey, result, 300);
   return result;
 };
 
 const getVendorDropdown = async () => {
-  const cached = await cacheGet('vendors:dropdown');
+  const cacheKey = `vendors:dropdown:${CACHE_VERSION}`;
+  const cached = await cacheGet(cacheKey);
   if (cached) return cached;
   const rows = await repo.findDropdown();
-  const result = { data: rows.map(r => ({ id: r.id, vendorName: r.vendor_name, assignedSiteId: r.assigned_site_id, assignedSiteName: r.assigned_site_name })), success: true };
-  await cacheSet('vendors:dropdown', result, 120);
+  const result = { data: rows.map(r => ({
+    id: r.id || r._id,
+    vendorName: r.vendorName ?? r.vendor_name,
+    assignedSiteId: r.assignedSiteId ?? r.assigned_site_id,
+    assignedSiteName: r.assigned_site_name ?? r.assignedSiteName ?? null,
+  })), success: true };
+  await cacheSet(cacheKey, result, 120);
   return result;
 };
 
@@ -93,9 +102,10 @@ const createVendor = async (d, creatorId) => {
   const accountId = account.id;
 
   const row = await repo.create({ ...d, accountId });
+  const rowId = row.id || row._id;
   // Sync: mark the allocated parking site's assigned_vendor_id
   if (d.assignedSiteId) {
-    await parkingRepo.updateSiteById(d.assignedSiteId, { assignedVendorId: row.id });
+    await parkingRepo.updateSiteById(d.assignedSiteId, { assignedVendorId: rowId });
   }
   await cacheDelPattern('vendors:*');
   return { data: formatVendor(row), success: true };
@@ -109,15 +119,15 @@ const updateVendor = async (id, d) => {
   if (d.assignedSiteId === '') d.assignedSiteId = null;
 
   // If password is being changed and vendor has a linked account, update it
-  if (d.password && existing.account_id) {
+  if (d.password && (existing.accountId ?? existing.account_id)) {
     const passwordHash = await bcrypt.hash(d.password, SALT_ROUNDS);
-    await accountRepo.updateById(existing.account_id, { password_hash: passwordHash });
+    await accountRepo.updateById(existing.accountId ?? existing.account_id, { password_hash: passwordHash });
   }
 
   const row = await repo.updateById(id, d);
   // Bidirectional sync: keep parking_sites.assigned_vendor_id aligned with vendors.assigned_site_id
   if (d.assignedSiteId !== undefined) {
-    const oldSiteId = existing.assigned_site_id;
+    const oldSiteId = existing.assignedSiteId ?? existing.assigned_site_id;
     const newSiteId = d.assignedSiteId || null;
     if (oldSiteId && oldSiteId !== newSiteId) {
       // Clear the old site's vendor reference
@@ -128,7 +138,7 @@ const updateVendor = async (id, d) => {
       await parkingRepo.updateSiteById(newSiteId, { assignedVendorId: id });
     }
   }
-  await cacheDel(`vendor:${id}`);
+  await cacheDel(`vendor:${CACHE_VERSION}:${id}`);
   await cacheDelPattern('vendors:*');
   return { data: formatVendor(row), success: true };
 };
@@ -138,7 +148,7 @@ const deactivateVendor = async (id) => {
   if (!existing) throw err('Vendor not found', 404);
   if (existing.status === 'inactive') throw err('Vendor is already inactive', 409);
   const row = await repo.updateById(id, { status: 'inactive' });
-  await cacheDel(`vendor:${id}`);
+  await cacheDel(`vendor:${CACHE_VERSION}:${id}`);
   await cacheDelPattern('vendors:*');
   return { data: formatVendor(row), success: true };
 };
@@ -146,7 +156,7 @@ const deactivateVendor = async (id) => {
 const deleteVendor = async (id) => {
   if (!await repo.findById(id)) throw err('Vendor not found', 404);
   await repo.deleteById(id);
-  await cacheDel(`vendor:${id}`);
+  await cacheDel(`vendor:${CACHE_VERSION}:${id}`);
   await cacheDelPattern('vendors:*');
 };
 
