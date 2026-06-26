@@ -27,16 +27,19 @@ const formatDuration = (minutes) => {
 
 // ─── Format session ───────────────────────────────────────────────────────────
 
+const sessionStatus = (row) =>
+  row.status ?? ((row.exitTime || row.exit_time) ? 'completed' : 'active')
+
 const formatSession = (row) => ({
-  id:           row.id,
-  numberPlate:  row.number_plate,
-  vehicleName:  row.vehicle_name,
-  vehicleModel: row.vehicle_model,
-  vehicleType:  row.vehicle_type,
-  entryTime:    row.entry_time,
-  exitTime:     row.exit_time,
-  status:       row.status,
-  durationMinutes: Math.round(Number(row.duration_minutes_calc)) || null,
+  id:                row._id || row.id,
+  numberPlate:       row.numberPlate ?? row.number_plate,
+  vehicleName:       row.vehicleName ?? row.vehicle_name,
+  vehicleModel:      row.vehicleModel ?? row.vehicle_model,
+  vehicleType:       row.vehicleType ?? row.vehicle_type,
+  entryTime:         row.entryTime ?? row.entry_time,
+  exitTime:          row.exitTime ?? row.exit_time ?? null,
+  status:            sessionStatus(row),
+  durationMinutes:   row.duration_minutes_calc != null ? Math.round(Number(row.duration_minutes_calc)) : null,
   durationFormatted: formatDuration(row.duration_minutes_calc),
 })
 

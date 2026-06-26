@@ -18,6 +18,9 @@ const formatDuration = (minutes) => {
   return `${String(d).padStart(2,'0')}d ${String(h).padStart(2,'0')}h ${String(min).padStart(2,'0')}m`;
 };
 
+const sessionStatus = (row) =>
+  row.status ?? ((row.exitTime || row.exit_time) ? 'completed' : 'active');
+
 const formatSession = (row) => {
   const duration = row.duration_minutes_calc ?? row.durationMinutes;
   return {
@@ -35,7 +38,7 @@ const formatSession = (row) => {
     exitTime:           row.exitTime || row.exit_time || null,
     durationMinutes:    duration != null ? Math.round(Number(duration)) : null,
     durationFormatted:  formatDuration(duration),
-    status:             row.status,
+    status:             sessionStatus(row),
     fee:                parseFloat(row.fee) || 0,
     isMonthly:          row.isMonthly === true,
     entryPlateImageUrl: row.entryPlateImageUrl || null,
@@ -191,6 +194,7 @@ const lookupByPlate = async (plate) => {
       plate: normalized,
       isAlreadyParked: !!activeSession,
       activeSessionId: activeSession?._id || activeSession?.id || null,
+      status: activeSession ? sessionStatus(activeSession) : null,
       registered: !!vehicle,
       vehicle: vehicle ? {
         id:           vehicle._id,
