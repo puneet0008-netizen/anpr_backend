@@ -6,6 +6,7 @@ const vehiclesRepo = require('../repositories/app_vehicles.repository');
 const sessionsRepo = require('../repositories/parking_sessions.repository');
 const visitorsRepo = require('../repositories/visitors.repository');
 const { parsePagination, buildMeta } = require('../utils/pagination');
+const { toSessionStatus, toParkingType } = require('../utils/sessionFormat');
 
 const SALT_ROUNDS = 12;
 const err = (msg, code) => Object.assign(new Error(msg), { statusCode: code });
@@ -158,7 +159,8 @@ const getAppUserDetail = async (id) => {
         vehicleName:     s.vehicleName ?? s.vehicle_name,
         entryTime:       s.entryTime ?? s.entry_time,
         exitTime:        s.exitTime ?? s.exit_time ?? null,
-        status:          s.status ?? ((s.exitTime || s.exit_time) ? 'completed' : 'active'),
+        status:          toSessionStatus(s),
+        parkingType:     toParkingType(s),
         durationMinutes: s.duration_minutes_calc != null ? Math.round(Number(s.duration_minutes_calc)) : null,
       })),
       rechargeHistory,

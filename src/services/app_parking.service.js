@@ -1,4 +1,5 @@
 const sessionsRepo = require('../repositories/parking_sessions.repository')
+const { toSessionStatus, toParkingType } = require('../utils/sessionFormat')
 
 // ─── Parking history for user (with date filter) ──────────────────────────────
 
@@ -27,9 +28,6 @@ const formatDuration = (minutes) => {
 
 // ─── Format session ───────────────────────────────────────────────────────────
 
-const sessionStatus = (row) =>
-  row.status ?? ((row.exitTime || row.exit_time) ? 'completed' : 'active')
-
 const formatSession = (row) => ({
   id:                row._id || row.id,
   numberPlate:       row.numberPlate ?? row.number_plate,
@@ -38,7 +36,8 @@ const formatSession = (row) => ({
   vehicleType:       row.vehicleType ?? row.vehicle_type,
   entryTime:         row.entryTime ?? row.entry_time,
   exitTime:          row.exitTime ?? row.exit_time ?? null,
-  status:            sessionStatus(row),
+  status:            toSessionStatus(row),
+  parkingType:       toParkingType(row),
   durationMinutes:   row.duration_minutes_calc != null ? Math.round(Number(row.duration_minutes_calc)) : null,
   durationFormatted: formatDuration(row.duration_minutes_calc),
 })

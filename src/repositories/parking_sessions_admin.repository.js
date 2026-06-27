@@ -11,15 +11,22 @@ const _calcDuration = (doc) => {
 
 const _enrichWithUser = async (sessions) => {
   const userIds = [...new Set(sessions.map(s => s.userId).filter(Boolean))];
-  const users   = await ParkingUser.find({ _id: { $in: userIds } }, { name: 1, phone: 1 }).lean();
+  const siteIds = [...new Set(sessions.map(s => s.siteId).filter(Boolean))];
+  const [users, sites] = await Promise.all([
+    ParkingUser.find({ _id: { $in: userIds } }, { name: 1, phone: 1 }).lean(),
+    ParkingSite.find({ _id: { $in: siteIds } }, { hourlyRate: 1 }).lean(),
+  ]);
   const userMap = {};
   for (const u of users) userMap[u._id] = u;
+  const siteMap = {};
+  for (const s of sites) siteMap[s._id] = s;
 
   return sessions.map(s => ({
     ...s,
     duration_minutes_calc: _calcDuration(s),
     user_name:  s.userId ? (userMap[s.userId]?.name  || null) : null,
     user_phone: s.userId ? (userMap[s.userId]?.phone || null) : null,
+    hourly_rate: s.siteId ? (siteMap[s.siteId]?.hourlyRate ?? 0) : 0,
   }));
 };
 

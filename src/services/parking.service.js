@@ -3,6 +3,8 @@ const userRepo    = require('../repositories/parking_users.repository');
 const vendorRepo  = require('../repositories/vendors.repository');
 const vendorSvc   = require('./vendors.service');
 const sessionsRepo = require('../repositories/parking_sessions_admin.repository');
+const { toSessionStatus, toParkingType, calcHourlyFee } = require('../utils/sessionFormat');
+const { toPublicImageUrl } = require('../utils/imageStorage');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { cacheGet, cacheSet, cacheDel, cacheDelPattern } = require('../config/redis');
 
@@ -198,17 +200,23 @@ const assertSiteAccess = async (siteId, { accountId, role }) => {
   return site;
 };
 
-const formatActiveSessionSummary = (row) => ({
-  id:          row._id || row.id,
-  numberPlate: row.numberPlate || row.number_plate,
-  entryTime:   row.entryTime || row.entry_time,
-  status:      row.status ?? 'active',
+const formatActiveSessionSummary = (row, hourlyRate = 0) => ({
+  id:                 row._id || row.id,
+  numberPlate:        row.numberPlate || row.number_plate,
+  entryTime:          row.entryTime || row.entry_time,
+  status:             toSessionStatus(row),
+  parkingType:        toParkingType(row),
+  userName:           row.user_name || null,
+  entryPlateImageUrl: toPublicImageUrl(row.entryPlateImageUrl),
+  entryCarImageUrl:   toPublicImageUrl(row.entryCarImageUrl),
+  fee:                calcHourlyFee(row, hourlyRate),
 });
 
 const getActiveSessionsBySiteId = async (siteId, { accountId, role }) => {
   const site = await assertSiteAccess(siteId, { accountId, role });
   const rows = await sessionsRepo.findActiveBySiteId(siteId);
-  const sessions = rows.map(formatActiveSessionSummary);
+  const hourlyRate = parseFloat(site.hourlyRate ?? site.hourly_rate) || 0;
+  const sessions = rows.map(r => formatActiveSessionSummary(r, hourlyRate));
   const activeSessionIds = sessions.map(s => s.id);
 
   return {

@@ -6,6 +6,8 @@ const { saveBase64Image } = require('../utils/imageStorage');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { cacheDel } = require('../config/redis');
 const { notifyParkingStatusForSession } = require('../sockets/parkingStatus');
+const { toSessionStatus, toParkingType, calcHourlyFee } = require('../utils/sessionFormat');
+const { toPublicImageUrl } = require('../utils/imageStorage');
 
 const err = (msg, code) => Object.assign(new Error(msg), { statusCode: code });
 
@@ -17,9 +19,6 @@ const formatDuration = (minutes) => {
   const min = m % 60;
   return `${String(d).padStart(2,'0')}d ${String(h).padStart(2,'0')}h ${String(min).padStart(2,'0')}m`;
 };
-
-const sessionStatus = (row) =>
-  row.status ?? ((row.exitTime || row.exit_time) ? 'completed' : 'active');
 
 const formatSession = (row) => {
   const duration = row.duration_minutes_calc ?? row.durationMinutes;
@@ -38,13 +37,14 @@ const formatSession = (row) => {
     exitTime:           row.exitTime || row.exit_time || null,
     durationMinutes:    duration != null ? Math.round(Number(duration)) : null,
     durationFormatted:  formatDuration(duration),
-    status:             sessionStatus(row),
-    fee:                parseFloat(row.fee) || 0,
+    status:             toSessionStatus(row),
+    parkingType:        toParkingType(row),
+    fee:                calcHourlyFee(row, row.hourly_rate ?? row.hourlyRate ?? 0),
     isMonthly:          row.isMonthly === true,
-    entryPlateImageUrl: row.entryPlateImageUrl || null,
-    entryCarImageUrl:   row.entryCarImageUrl || null,
-    exitPlateImageUrl:  row.exitPlateImageUrl || null,
-    exitCarImageUrl:    row.exitCarImageUrl || null,
+    entryPlateImageUrl: toPublicImageUrl(row.entryPlateImageUrl),
+    entryCarImageUrl:   toPublicImageUrl(row.entryCarImageUrl),
+    exitPlateImageUrl:  toPublicImageUrl(row.exitPlateImageUrl),
+    exitCarImageUrl:    toPublicImageUrl(row.exitCarImageUrl),
     createdAt:          row.createdAt || row.created_at,
   };
 };
@@ -194,7 +194,8 @@ const lookupByPlate = async (plate) => {
       plate: normalized,
       isAlreadyParked: !!activeSession,
       activeSessionId: activeSession?._id || activeSession?.id || null,
-      status: activeSession ? sessionStatus(activeSession) : null,
+      status: activeSession ? toSessionStatus(activeSession) : null,
+      parkingType: activeSession ? toParkingType(activeSession) : null,
       registered: !!vehicle,
       vehicle: vehicle ? {
         id:           vehicle._id,

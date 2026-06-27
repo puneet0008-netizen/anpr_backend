@@ -58,4 +58,14 @@ const saveBase64Image = (base64, subfolder) => {
   return `/uploads/sessions/${subfolder}/${filename}`;
 };
 
-module.exports = { saveBase64Image, parseBase64Image };
+const getPublicBaseUrl = () =>
+  (process.env.BASE_URL || process.env.APP_URL || `http://localhost:${process.env.PORT || 3000}`).replace(/\/$/, '');
+
+/** Turn a stored path (/uploads/...) into a full public URL. */
+const toPublicImageUrl = (urlPath) => {
+  if (!urlPath) return null;
+  if (/^https?:\/\//i.test(urlPath)) return urlPath;
+  return `${getPublicBaseUrl()}${urlPath.startsWith('/') ? urlPath : `/${urlPath}`}`;
+};
+
+module.exports = { saveBase64Image, parseBase64Image, toPublicImageUrl, getPublicBaseUrl };
