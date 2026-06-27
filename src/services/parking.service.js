@@ -6,24 +6,26 @@ const { cacheGet, cacheSet, cacheDel, cacheDelPattern } = require('../config/red
 const err = (msg, code) => Object.assign(new Error(msg), { statusCode: code });
 
 const formatSite = (row) => row ? {
-  id:                   row.id,
-  siteName:             row.site_name,
+  id:                   row.id || row._id,
+  siteName:             row.siteName ?? row.site_name,
   location:             row.location,
   type:                 row.type,
-  totalCapacity:        row.total_capacity,
-  occupied:             row.occupied      ?? 0,
-  allottedSlots:        row.allotted_slots ?? 0,
-  hourlyRate:           parseFloat(row.hourly_rate),
-  dailyRate:            parseFloat(row.daily_rate),
-  monthlyRate:          parseFloat(row.monthly_rate),
+  totalCapacity:        row.totalCapacity ?? row.total_capacity,
+  occupied:             row.occupied ?? 0,
+  allottedSlots:        row.allotted_slots ?? row.allottedSlots ?? 0,
+  hourlyRate:           parseFloat(row.hourlyRate ?? row.hourly_rate) || 0,
+  dailyRate:            parseFloat(row.dailyRate ?? row.daily_rate) || 0,
+  monthlyRate:          parseFloat(row.monthlyRate ?? row.monthly_rate) || 0,
   status:               row.status,
-  assignedVendorId:     row.assigned_vendor_id,
-  assignedVendorName:   row.assigned_vendor_name,
-  entryCameraIp:        row.entry_camera_ip,
-  exitCameraIp:         row.exit_camera_ip,
-  barrierControllerIp:  row.barrier_controller_ip,
-  createdAt:            row.created_at,
+  assignedVendorId:     row.assignedVendorId ?? row.assigned_vendor_id,
+  assignedVendorName:   row.assigned_vendor_name ?? row.assignedVendorName ?? null,
+  entryCameraIp:        row.entryCameraIp ?? row.entry_camera_ip,
+  exitCameraIp:         row.exitCameraIp ?? row.exit_camera_ip,
+  barrierControllerIp:  row.barrierControllerIp ?? row.barrier_controller_ip,
+  createdAt:            row.createdAt ?? row.created_at,
 } : null;
+
+const DROPDOWN_CACHE_VERSION = 'v2';
 
 // ─── Sites ───────────────────────────────────────────────────────────────────
 
@@ -104,11 +106,12 @@ const getRecentRecharges = async () => {
 };
 
 const getSiteDropdown = async () => {
-  const cached = await cacheGet('parking:dropdown');
+  const cacheKey = `parking:dropdown:${DROPDOWN_CACHE_VERSION}`;
+  const cached = await cacheGet(cacheKey);
   if (cached) return cached;
   const rows = await repo.findDropdown();
-  const result = { data: rows.map(r => ({ id: r.id, siteName: r.site_name })), success: true };
-  await cacheSet('parking:dropdown', result, 120);
+  const result = { data: rows.map(r => ({ id: r.id || r._id, siteName: r.siteName ?? r.site_name })), success: true };
+  await cacheSet(cacheKey, result, 120);
   return result;
 };
 

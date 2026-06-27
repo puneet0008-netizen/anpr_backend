@@ -5,7 +5,7 @@ const { authorize }    = require('../middlewares/rbac.middleware');
 const { auditLog }     = require('../middlewares/audit.middleware');
 
 const router = Router();
-router.use(authenticate, authorize('admin'));
+router.use(authenticate, authorize('admin', 'vendor'));
 
 router.get('/stats',             ctrl.getStats);
 router.get('/recharge/recent',   ctrl.recentRecharges);
