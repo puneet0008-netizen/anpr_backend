@@ -109,35 +109,28 @@ const notifyAppUserParkingStatus = async (userId) => {
   }
 };
 
-/** Push IN/OUT to app user only when plate matches parkingusers.vehicleNumber. */
+/** Push IN/OUT to the app user linked to this session. */
 const notifyParkingStatusForSession = async (session, direction) => {
   if (!session?.numberPlate || !['IN', 'OUT'].includes(direction)) return;
 
-  const parkingUser = await usersRepo.findByVehicle(session.numberPlate);
-  if (!parkingUser) return;
+  let userId = session.userId || session.user_id || null;
 
-  const payload = {
-    carStatus:   direction,
-    isParked:    direction === 'IN',
-    numberPlate: session.numberPlate,
-    parkingName: session.parkingName || null,
-    sessionId:   session._id || session.id || null,
-    entryTime:   session.entryTime || null,
-    exitTime:    session.exitTime || null,
-    isMonthly:   true,
-    matched:     true,
-    timestamp:   new Date(),
-  };
+  if (!userId) {
+    const parkingUser = await usersRepo.findAppUserByPlate(session.numberPlate);
+    userId = parkingUser?._id || null;
+  }
+
+  if (!userId) return;
 
   try {
-    getIO().to(`user:${parkingUser._id}`).emit(EVENT, payload);
+    await emitParkingStatus(userId);
     logger.info('Parking status pushed', {
-      userId: parkingUser._id,
-      plate:  session.numberPlate,
+      userId,
+      plate:     session.numberPlate,
       direction,
     });
   } catch (err) {
-    logger.warn('Parking status notify failed', { userId: parkingUser._id, error: err.message });
+    logger.warn('Parking status notify failed', { userId, error: err.message });
   }
 };
 

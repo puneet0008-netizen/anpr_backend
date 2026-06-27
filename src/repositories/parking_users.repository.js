@@ -10,17 +10,38 @@ const { v4: uuidv4 } = require('uuid');
  */
 const _enrich = async (doc) => {
   if (!doc) return null;
-  const [wallet, vendor, site] = await Promise.all([
+  const [wallet, vendor, site, primaryVehicle] = await Promise.all([
     ParkingWallet.findOne({ userId: doc._id }).lean(),
     doc.vendorId       ? Vendor.findById(doc.vendorId).lean()       : null,
     doc.assignedSiteId ? ParkingSite.findById(doc.assignedSiteId).lean() : null,
+    AppVehicle.findOne({ userId: doc._id, status: { $ne: 'removed' } })
+      .sort({ isPrimary: -1, createdAt: 1 })
+      .lean(),
   ]);
   doc.wallet_balance      = wallet?.balance         ?? null;
   doc.total_recharges     = wallet?.totalRecharges  ?? null;
   doc.last_recharge       = wallet?.lastRechargeAt  ?? null;
   doc.vendor_name         = vendor?.vendorName      ?? null;
   doc.assigned_site_name  = site?.siteName          ?? null;
+  if (!doc.vehicleNumber && primaryVehicle?.numberPlate) {
+    doc.vehicleNumber = primaryVehicle.numberPlate;
+  }
   return doc;
+};
+
+/** Resolve app parking user by plate — checks user.vehicleNumber and AppVehicle. */
+const findAppUserByPlate = async (plate) => {
+  const user = await findByVehicle(plate);
+  if (user) return user;
+
+  const normalized = plate.toUpperCase().trim();
+  const vehicle = await AppVehicle.findOne({
+    numberPlate: normalized,
+    status:      { $ne: 'removed' },
+  }).lean();
+  if (!vehicle?.userId) return null;
+
+  return ParkingUser.findOne({ _id: vehicle.userId, type: 'app', status: 'active' }).lean();
 };
 
 const findAll = async ({ type, search, status, limit, offset, sortBy = 'joinedAt', sortOrder = 'DESC' }) => {
@@ -172,7 +193,7 @@ const removeVehicle = async (vehicleId, userId) => {
 };
 
 module.exports = {
-  findAll, findById, findByEmail, findByVehicle, search,
+  findAll, findById, findByEmail, findByVehicle, findAppUserByPlate, search,
   create, createWallet, updateById, deleteById,
   listVehicles, addVehicle, updateVehicle, removeVehicle,
 };

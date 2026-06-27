@@ -98,7 +98,7 @@ const updateUser = async (id, d) => {
   if (d.email && d.email !== existing.email) {
     if (await repo.findByEmail(d.email)) throw err('Email already in use', 409);
   }
-  if (d.vehicleNumber && d.vehicleNumber !== existing.vehicle_number) {
+  if (d.vehicleNumber && d.vehicleNumber !== (existing.vehicleNumber ?? existing.vehicle_number)) {
     if (await repo.findByVehicle(d.vehicleNumber)) throw err('Vehicle already registered', 409);
   }
 
@@ -176,7 +176,7 @@ const setPrimaryVehicle = async (userId, vehicleId) => {
   await vehiclesRepo.setPrimary(userId, vehicleId);
   // Sync vehicle_number on the user row to reflect the new primary
   const newPrimary = await vehiclesRepo.findById(vehicleId);
-  if (newPrimary) await repo.updateById(userId, { vehicleNumber: newPrimary.number_plate });
+  if (newPrimary) await repo.updateById(userId, { vehicleNumber: newPrimary.numberPlate ?? newPrimary.number_plate });
   const vehicles = await vehiclesRepo.findByUser(userId);
   return { data: vehicles.map(formatVehicle), success: true };
 };
@@ -193,8 +193,8 @@ const addUserVehicle = async (userId, d) => {
   if (!user) throw err('User not found', 404);
   const vehicle = await repo.addVehicle(userId, d);
   // If this became the primary vehicle (first one added), sync vehicle_number on the user row
-  if (vehicle.is_primary) {
-    await repo.updateById(userId, { vehicleNumber: vehicle.number_plate });
+  if (vehicle.isPrimary ?? vehicle.is_primary) {
+    await repo.updateById(userId, { vehicleNumber: vehicle.numberPlate ?? vehicle.number_plate });
   }
   return { data: formatVehicle(vehicle), success: true };
 };
@@ -213,8 +213,8 @@ const removeUserVehicle = async (userId, vehicleId) => {
   await repo.removeVehicle(vehicleId, userId);
   // After removal, sync vehicle_number to the new primary (or clear if none left)
   const remaining = await vehiclesRepo.findByUser(userId);
-  const primary = remaining.find(v => v.is_primary);
-  await repo.updateById(userId, { vehicleNumber: primary ? primary.number_plate : null });
+  const primary = remaining.find(v => v.isPrimary ?? v.is_primary);
+  await repo.updateById(userId, { vehicleNumber: primary ? (primary.numberPlate ?? primary.number_plate) : null });
 };
 
 module.exports = { listUsers, getUserById, searchUsers, createUser, updateUser, deleteUser, rechargeWallet, getAppUserDetail, listUserVehicles, addUserVehicle, updateUserVehicle, removeUserVehicle, setPrimaryVehicle };

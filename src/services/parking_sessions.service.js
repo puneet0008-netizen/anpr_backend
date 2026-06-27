@@ -103,7 +103,7 @@ const recordEntry = async (d) => {
       vehicleType  = vehicleType  || vehicle.vehicleType;
     }
 
-    const parkingUser = await usersRepo.findByVehicle(plate);
+    const parkingUser = await usersRepo.findAppUserByPlate(plate);
     const isMonthly   = !!parkingUser;
     if (parkingUser) {
       userId = userId || parkingUser._id;
