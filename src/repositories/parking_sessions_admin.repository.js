@@ -131,4 +131,11 @@ const getActiveSessions = async () => {
   return _enrichWithUser(docs);
 };
 
-module.exports = { listAll, recordEntry, recordExit, findActiveByPlate, findById, getActiveSessions };
+const findActiveBySiteId = async (siteId) => {
+  const docs = await ParkingSession.find({ siteId, status: 'active' })
+    .sort({ entryTime: -1 })
+    .lean();
+  return _enrichWithUser(docs);
+};
+
+module.exports = { listAll, recordEntry, recordExit, findActiveByPlate, findById, getActiveSessions, findActiveBySiteId };

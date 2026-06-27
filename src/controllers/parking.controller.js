@@ -19,5 +19,17 @@ const getVendorParkingDetails = async (req, res, next) => {
     }));
   } catch (e) { next(e); }
 };
+const getActiveSessionsBySiteId = async (req, res, next) => {
+  try {
+    res.json(await svc.getActiveSessionsBySiteId(req.params.id, {
+      accountId: req.user.id,
+      role:      req.user.role,
+    }));
+  } catch (e) { next(e); }
+};
 
-module.exports = { listSites, createSite, updateSite, deleteSite, getStats, processRecharge, recentRecharges, siteDropdown, getVendorParkingDetails };
+module.exports = {
+  listSites, createSite, updateSite, deleteSite, getStats,
+  processRecharge, recentRecharges, siteDropdown,
+  getVendorParkingDetails, getActiveSessionsBySiteId,
+};

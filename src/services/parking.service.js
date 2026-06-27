@@ -2,6 +2,7 @@ const repo        = require('../repositories/parking.repository');
 const userRepo    = require('../repositories/parking_users.repository');
 const vendorRepo  = require('../repositories/vendors.repository');
 const vendorSvc   = require('./vendors.service');
+const sessionsRepo = require('../repositories/parking_sessions_admin.repository');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { cacheGet, cacheSet, cacheDel, cacheDelPattern } = require('../config/redis');
 
@@ -176,4 +177,54 @@ const getVendorParkingDetails = async ({ accountId, role, vendorId }) => {
   };
 };
 
-module.exports = { listSites, createSite, updateSite, deleteSite, getStats, processRecharge, getRecentRecharges, getSiteDropdown, getVendorParkingDetails };
+const assertSiteAccess = async (siteId, { accountId, role }) => {
+  const site = await repo.findSiteById(siteId);
+  if (!site) throw err('Parking site not found', 404);
+
+  if (role === 'admin') return site;
+
+  const vendor = await vendorSvc.resolveVendorForAccount(accountId);
+  if (!vendor) throw err('Vendor profile not found', 404);
+
+  const vendorId = vendor._id || vendor.id;
+  const siteVendorId = site.assignedVendorId ?? site.assigned_vendor_id;
+  const primarySiteId = vendor.assignedSiteId ?? vendor.assigned_site_id;
+  const resolvedSiteId = site._id || site.id;
+
+  if (siteVendorId !== vendorId && resolvedSiteId !== primarySiteId) {
+    throw err('You do not have access to this parking site', 403);
+  }
+
+  return site;
+};
+
+const formatActiveSessionSummary = (row) => ({
+  id:          row._id || row.id,
+  numberPlate: row.numberPlate || row.number_plate,
+  entryTime:   row.entryTime || row.entry_time,
+  status:      row.status ?? 'active',
+});
+
+const getActiveSessionsBySiteId = async (siteId, { accountId, role }) => {
+  const site = await assertSiteAccess(siteId, { accountId, role });
+  const rows = await sessionsRepo.findActiveBySiteId(siteId);
+  const sessions = rows.map(formatActiveSessionSummary);
+  const activeSessionIds = sessions.map(s => s.id);
+
+  return {
+    data: {
+      parkingSiteId:    site._id || site.id,
+      siteName:         site.siteName ?? site.site_name,
+      activeSessionIds,
+      count:            activeSessionIds.length,
+      sessions,
+    },
+    success: true,
+  };
+};
+
+module.exports = {
+  listSites, createSite, updateSite, deleteSite, getStats,
+  processRecharge, getRecentRecharges, getSiteDropdown,
+  getVendorParkingDetails, getActiveSessionsBySiteId,
+};

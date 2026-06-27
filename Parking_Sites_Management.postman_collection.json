@@ -199,6 +199,18 @@
           }
         },
         {
+          "name": "Active Sessions by Site ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/parking/{{parkingSiteId}}/active-sessions",
+            "description": "Active session IDs for a parking site. Set parkingSiteId variable first."
+          }
+        },
+        {
           "name": "Create Parking Site",
           "event": [
             {
@@ -345,6 +357,18 @@
             "method": "GET",
             "url": "{{baseUrl}}/parking/vendor-details",
             "description": "Logged-in vendor ke assigned parking sites aur stats. vendorId ki zarurat nahi."
+          }
+        },
+        {
+          "name": "Active Sessions by Site ID",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{vendorAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/parking/{{parkingSiteId}}/active-sessions",
+            "description": "Active session IDs for vendor's parking site. Vendor can only access assigned sites."
           }
         },
         {

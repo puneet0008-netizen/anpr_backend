@@ -13,6 +13,7 @@ router.get('/recharge/recent',   ctrl.recentRecharges);
 router.post('/recharge',         auditLog('PARKING_RECHARGE', 'recharge'), ctrl.processRecharge);
 router.get('/list',              ctrl.siteDropdown);   // dropdown — before /:id
 
+router.get('/:id/active-sessions', ctrl.getActiveSessionsBySiteId);
 router.get('/',      ctrl.listSites);
 router.post('/',     auditLog('CREATE_PARKING_SITE', 'parking_site'), ctrl.createSite);
 router.patch('/:id', auditLog('UPDATE_PARKING_SITE', 'parking_site', r => r.params.id), ctrl.updateSite);
