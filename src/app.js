@@ -41,8 +41,12 @@ if (process.env.NODE_ENV !== 'test') {
 // ── Rate limiting ────────────────────────────────────────────────────────────
 app.use(apiLimiter);
 
-// ── Static files (profile photos) ────────────────────────────────────────────
-app.use('/uploads', express.static(path.join(process.cwd(), 'uploads')));
+// ── Static files (session images, profile photos) ───────────────────────────
+app.use('/uploads', (_req, res, next) => {
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.set('Access-Control-Allow-Origin', '*');
+  next();
+}, express.static(path.join(process.cwd(), 'uploads')));
 
 // ── API routes ────────────────────────────────────────────────────────────────
 const API_PREFIX = process.env.API_PREFIX || '/api/v1';
