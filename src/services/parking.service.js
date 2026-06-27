@@ -204,29 +204,41 @@ const formatActiveSessionSummary = (row, hourlyRate = 0) => ({
   id:                 row._id || row.id,
   numberPlate:        row.numberPlate || row.number_plate,
   entryTime:          row.entryTime || row.entry_time,
+  exitTime:           row.exitTime || row.exit_time || null,
   status:             toSessionStatus(row),
   parkingType:        toParkingType(row),
   userName:           row.user_name || null,
   entryPlateImageUrl: toPublicImageUrl(row.entryPlateImageUrl),
   entryCarImageUrl:   toPublicImageUrl(row.entryCarImageUrl),
+  exitPlateImageUrl:  toPublicImageUrl(row.exitPlateImageUrl),
+  exitCarImageUrl:    toPublicImageUrl(row.exitCarImageUrl),
   fee:                calcHourlyFee(row, hourlyRate),
 });
 
-const getActiveSessionsBySiteId = async (siteId, { accountId, role }) => {
+const getActiveSessionsBySiteId = async (siteId, { accountId, role, query = {} }) => {
   const site = await assertSiteAccess(siteId, { accountId, role });
-  const rows = await sessionsRepo.findActiveBySiteId(siteId);
+  const { page, limit, offset } = parsePagination(query);
+  const { rows, total } = await sessionsRepo.findBySiteId(siteId, {
+    status:    query.status,
+    startDate: query.startDate,
+    endDate:   query.endDate,
+    limit,
+    offset,
+  });
   const hourlyRate = parseFloat(site.hourlyRate ?? site.hourly_rate) || 0;
   const sessions = rows.map(r => formatActiveSessionSummary(r, hourlyRate));
-  const activeSessionIds = sessions.map(s => s.id);
+  const activeSessionIds = sessions.filter(s => s.status === 'IN').map(s => s.id);
 
   return {
     data: {
       parkingSiteId:    site._id || site.id,
       siteName:         site.siteName ?? site.site_name,
       activeSessionIds,
-      count:            activeSessionIds.length,
+      activeCount:      activeSessionIds.length,
+      count:            total,
       sessions,
     },
+    meta: buildMeta(total, page, limit),
     success: true,
   };
 };

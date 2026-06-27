@@ -145,4 +145,22 @@ const findActiveBySiteId = async (siteId) => {
   return _enrichWithUser(docs);
 };
 
-module.exports = { listAll, recordEntry, recordExit, findActiveByPlate, findById, getActiveSessions, findActiveBySiteId };
+const findBySiteId = async (siteId, { status, startDate, endDate, limit = 50, offset = 0 } = {}) => {
+  const filter = { siteId };
+  if (status === 'IN')  filter.status = 'active';
+  if (status === 'OUT') filter.status = 'completed';
+  if (startDate || endDate) {
+    filter.entryTime = {};
+    if (startDate) filter.entryTime.$gte = new Date(startDate);
+    if (endDate)   filter.entryTime.$lte = new Date(endDate);
+  }
+
+  const [docs, total] = await Promise.all([
+    ParkingSession.find(filter).sort({ entryTime: -1 }).skip(offset).limit(limit).lean(),
+    ParkingSession.countDocuments(filter),
+  ]);
+  const rows = await _enrichWithUser(docs);
+  return { rows, total };
+};
+
+module.exports = { listAll, recordEntry, recordExit, findActiveByPlate, findById, getActiveSessions, findActiveBySiteId, findBySiteId };

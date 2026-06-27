@@ -24,6 +24,7 @@ const getActiveSessionsBySiteId = async (req, res, next) => {
     res.json(await svc.getActiveSessionsBySiteId(req.params.id, {
       accountId: req.user.id,
       role:      req.user.role,
+      query:     req.query,
     }));
   } catch (e) { next(e); }
 };
