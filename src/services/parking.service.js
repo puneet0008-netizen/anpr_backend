@@ -1,6 +1,7 @@
 const repo        = require('../repositories/parking.repository');
 const userRepo    = require('../repositories/parking_users.repository');
 const vendorRepo  = require('../repositories/vendors.repository');
+const vendorSvc   = require('./vendors.service');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { cacheGet, cacheSet, cacheDel, cacheDelPattern } = require('../config/redis');
 
@@ -133,7 +134,8 @@ const formatVendorSummary = (row) => row ? {
 const getVendorParkingDetails = async ({ accountId, role, vendorId }) => {
   let vendor;
   if (role === 'vendor') {
-    vendor = await vendorRepo.findByAccountId(accountId);
+    // Vendor role: resolve profile from JWT token — vendorId query param is ignored.
+    vendor = await vendorSvc.resolveVendorForAccount(accountId);
     if (!vendor) throw err('Vendor profile not found', 404);
   } else {
     if (!vendorId) throw err('vendorId query param is required', 400);

@@ -51,9 +51,16 @@ const logoutAll = async (req, res, next) => {
   }
 };
 
+const { resolveVendorForAccount } = require('../services/vendors.service');
+
 const me = async (req, res, next) => {
   try {
-    return sendSuccess(res, { data: { id: req.user.id, role: req.user.role } });
+    const data = { id: req.user.id, role: req.user.role };
+    if (req.user.role === 'vendor') {
+      const vendor = await resolveVendorForAccount(req.user.id);
+      if (vendor) data.vendorId = vendor._id || vendor.id;
+    }
+    return sendSuccess(res, { data });
   } catch (err) {
     next(err);
   }

@@ -3,7 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const repo         = require('../repositories/vendors.repository');
 const parkingRepo  = require('../repositories/parking.repository');
 const accountRepo  = require('../repositories/account.repository');
-const { encrypt, hmac } = require('../utils/encryption');
+const { encrypt, decrypt, hmac } = require('../utils/encryption');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { cacheGet, cacheSet, cacheDel, cacheDelPattern } = require('../config/redis');
 
@@ -38,6 +38,30 @@ const formatVendor = (row) => row ? {
 } : null;
 
 const CACHE_VERSION = 'v2';
+
+/** Resolve vendor profile from login account id (auto-links legacy records by email). */
+const resolveVendorForAccount = async (accountId) => {
+  let vendor = await repo.findByAccountId(accountId);
+  if (vendor) return vendor;
+
+  const account = await accountRepo.findById(accountId);
+  if (!account || account.role !== 'vendor') return null;
+
+  if (account.usernameEncrypted) {
+    const email = decrypt(account.usernameEncrypted);
+    vendor = await repo.findByEmail(email);
+    if (vendor) {
+      const vendorId = vendor._id || vendor.id;
+      if (!vendor.accountId) {
+        await repo.updateById(vendorId, { accountId });
+        vendor.accountId = accountId;
+      }
+      return vendor;
+    }
+  }
+
+  return null;
+};
 
 const listVendors = async (query) => {
   const { page, limit, offset, sortBy, sortOrder, search } = parsePagination(query);
@@ -99,7 +123,7 @@ const createVendor = async (d, creatorId) => {
     phoneHash:         hmac(d.phone || ''),
     createdBy:         creatorId || null,
   });
-  const accountId = account.id;
+  const accountId = account._id;
 
   const row = await repo.create({ ...d, accountId });
   const rowId = row.id || row._id;
@@ -121,7 +145,7 @@ const updateVendor = async (id, d) => {
   // If password is being changed and vendor has a linked account, update it
   if (d.password && (existing.accountId ?? existing.account_id)) {
     const passwordHash = await bcrypt.hash(d.password, SALT_ROUNDS);
-    await accountRepo.updateById(existing.accountId ?? existing.account_id, { password_hash: passwordHash });
+    await accountRepo.updateById(existing.accountId ?? existing.account_id, { passwordHash });
   }
 
   const row = await repo.updateById(id, d);
@@ -160,4 +184,7 @@ const deleteVendor = async (id) => {
   await cacheDelPattern('vendors:*');
 };
 
-module.exports = { listVendors, getVendorById, getVendorDropdown, createVendor, updateVendor, deactivateVendor, deleteVendor };
+module.exports = {
+  listVendors, getVendorById, getVendorDropdown, createVendor, updateVendor,
+  deactivateVendor, deleteVendor, resolveVendorForAccount,
+};

@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const accountRepo = require('../repositories/account.repository');
 const tokenRepo   = require('../repositories/token.repository');
+const { resolveVendorForAccount } = require('./vendors.service');
 const { encrypt, decrypt, hmac } = require('../utils/encryption');
 const {
   signAccessToken,
@@ -36,13 +37,20 @@ const login = async ({ username, password, ipAddress, userAgent }) => {
     userAgent,
   });
 
-  return {
+  const result = {
     accessToken,
     refreshToken,
     expiresIn: process.env.JWT_EXPIRES_IN || '1h',
     role:      account.role,
     id:        account._id,
   };
+
+  if (account.role === 'vendor') {
+    const vendor = await resolveVendorForAccount(account._id);
+    if (vendor) result.vendorId = vendor._id || vendor.id;
+  }
+
+  return result;
 };
 
 // ─── Refresh ─────────────────────────────────────────────────────────────────

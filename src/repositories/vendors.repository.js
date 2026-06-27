@@ -60,6 +60,12 @@ const findByAccountId = async (accountId) => {
   return _enrich(doc, { includeSitesList: true });
 };
 
+const findByEmail = async (email) => {
+  const doc = await Vendor.findOne({ email: new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') }).lean();
+  if (!doc) return null;
+  return _enrich(doc, { includeSitesList: true });
+};
+
 const findDropdown = async () => {
   const vendors = await Vendor.find({ status: 'active' }, { _id: 1, vendorName: 1, assignedSiteId: 1 })
     .sort({ vendorName: 1 })
@@ -105,6 +111,7 @@ const updateById = async (id, d) => {
     registeredAddress: 'registeredAddress', primaryService: 'primaryService',
     contractStartDate: 'contractStartDate', notes: 'notes', status: 'status',
     assignedSiteId: 'assignedSiteId',
+    accountId: 'accountId',
   };
   const update = {};
   for (const [key, field] of Object.entries(map)) {
@@ -126,4 +133,4 @@ const existsByGstin = async (gstin, excludeId = null) => {
   return count > 0;
 };
 
-module.exports = { findAll, findById, findByAccountId, findDropdown, create, updateById, deleteById, existsByGstin };
+module.exports = { findAll, findById, findByAccountId, findByEmail, findDropdown, create, updateById, deleteById, existsByGstin };
