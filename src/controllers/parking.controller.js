@@ -9,6 +9,15 @@ const getStats        = async (req, res, next) => { try { res.json(await svc.get
 const processRecharge = async (req, res, next) => { try { res.status(201).json(await svc.processRecharge(req.body, req.user.id)); } catch (e) { next(e); } };
 const recentRecharges = async (req, res, next) => { try { res.json(await svc.getRecentRecharges()); } catch (e) { next(e); } };
 
-const siteDropdown    = async (req, res, next) => { try { res.json(await svc.getSiteDropdown()); } catch (e) { next(e); } };
+const siteDropdown         = async (req, res, next) => { try { res.json(await svc.getSiteDropdown()); } catch (e) { next(e); } };
+const getVendorParkingDetails = async (req, res, next) => {
+  try {
+    res.json(await svc.getVendorParkingDetails({
+      accountId: req.user.id,
+      role:      req.user.role,
+      vendorId:  req.query.vendorId,
+    }));
+  } catch (e) { next(e); }
+};
 
-module.exports = { listSites, createSite, updateSite, deleteSite, getStats, processRecharge, recentRecharges, siteDropdown };
+module.exports = { listSites, createSite, updateSite, deleteSite, getStats, processRecharge, recentRecharges, siteDropdown, getVendorParkingDetails };

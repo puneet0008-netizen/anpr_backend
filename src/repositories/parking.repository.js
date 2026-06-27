@@ -179,6 +179,33 @@ const findDropdown = async () => {
   return ParkingSite.find({ status: 'active' }, { _id: 1, siteName: 1 }).sort({ siteName: 1 }).lean();
 };
 
+const findSitesByVendorId = async (vendorId) => {
+  const vendor = await Vendor.findById(vendorId).lean();
+  const filter = vendor?.assignedSiteId
+    ? { $or: [{ assignedVendorId: vendorId }, { _id: vendor.assignedSiteId }] }
+    : { assignedVendorId: vendorId };
+
+  const docs = await ParkingSite.find(filter).sort({ siteName: 1 }).lean();
+  return Promise.all(docs.map(_enrichSite));
+};
+
+const getVendorSessionStats = async (siteIds) => {
+  if (!siteIds.length) {
+    return { activeSessions: 0, todayEntries: 0, todayExits: 0 };
+  }
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+
+  const [activeSessions, todayEntries, todayExits] = await Promise.all([
+    ParkingSession.countDocuments({ siteId: { $in: siteIds }, status: 'active' }),
+    ParkingSession.countDocuments({ siteId: { $in: siteIds }, entryTime: { $gte: today } }),
+    ParkingSession.countDocuments({ siteId: { $in: siteIds }, exitTime: { $gte: today }, status: 'completed' }),
+  ]);
+
+  return { activeSessions, todayEntries, todayExits };
+};
+
 module.exports = {
   findAllSites,
   findSiteById,
@@ -191,4 +218,6 @@ module.exports = {
   createRecharge,
   updateWallet,
   getRecentRecharges,
+  findSitesByVendorId,
+  getVendorSessionStats,
 };

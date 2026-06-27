@@ -54,6 +54,12 @@ const findById = async (id) => {
   return _enrich(doc, { includeSitesList: true });
 };
 
+const findByAccountId = async (accountId) => {
+  const doc = await Vendor.findOne({ accountId }).lean();
+  if (!doc) return null;
+  return _enrich(doc, { includeSitesList: true });
+};
+
 const findDropdown = async () => {
   const vendors = await Vendor.find({ status: 'active' }, { _id: 1, vendorName: 1, assignedSiteId: 1 })
     .sort({ vendorName: 1 })
@@ -120,4 +126,4 @@ const existsByGstin = async (gstin, excludeId = null) => {
   return count > 0;
 };
 
-module.exports = { findAll, findById, findDropdown, create, updateById, deleteById, existsByGstin };
+module.exports = { findAll, findById, findByAccountId, findDropdown, create, updateById, deleteById, existsByGstin };

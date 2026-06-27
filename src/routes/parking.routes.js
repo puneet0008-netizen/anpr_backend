@@ -8,6 +8,7 @@ const router = Router();
 router.use(authenticate, authorize('admin', 'vendor'));
 
 router.get('/stats',             ctrl.getStats);
+router.get('/vendor-details',    ctrl.getVendorParkingDetails);
 router.get('/recharge/recent',   ctrl.recentRecharges);
 router.post('/recharge',         auditLog('PARKING_RECHARGE', 'recharge'), ctrl.processRecharge);
 router.get('/list',              ctrl.siteDropdown);   // dropdown — before /:id

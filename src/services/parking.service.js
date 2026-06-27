@@ -1,5 +1,6 @@
-const repo     = require('../repositories/parking.repository');
-const userRepo  = require('../repositories/parking_users.repository');
+const repo        = require('../repositories/parking.repository');
+const userRepo    = require('../repositories/parking_users.repository');
+const vendorRepo  = require('../repositories/vendors.repository');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { cacheGet, cacheSet, cacheDel, cacheDelPattern } = require('../config/redis');
 
@@ -115,4 +116,62 @@ const getSiteDropdown = async () => {
   return result;
 };
 
-module.exports = { listSites, createSite, updateSite, deleteSite, getStats, processRecharge, getRecentRecharges, getSiteDropdown };
+const formatVendorSummary = (row) => row ? {
+  id:                row._id || row.id,
+  vendorName:        row.vendorName ?? row.vendor_name,
+  contactPerson:     row.contactPerson ?? row.contact_person,
+  phone:             row.phone,
+  email:             row.email,
+  city:              row.city,
+  state:             row.state,
+  status:            row.status,
+  assignedSiteId:    row.assignedSiteId ?? row.assigned_site_id,
+  assignedSiteName:  row.assigned_site_name ?? row.assignedSiteName ?? null,
+  contractsCount:    parseInt(row.contracts_count ?? row.contractsCount) || 0,
+} : null;
+
+const getVendorParkingDetails = async ({ accountId, role, vendorId }) => {
+  let vendor;
+  if (role === 'vendor') {
+    vendor = await vendorRepo.findByAccountId(accountId);
+    if (!vendor) throw err('Vendor profile not found', 404);
+  } else {
+    if (!vendorId) throw err('vendorId query param is required', 400);
+    vendor = await vendorRepo.findById(vendorId);
+    if (!vendor) throw err('Vendor not found', 404);
+  }
+
+  const resolvedVendorId = vendor._id || vendor.id;
+  const sites = await repo.findSitesByVendorId(resolvedVendorId);
+  const siteIds = sites.map(s => s._id || s.id);
+  const sessionStats = await repo.getVendorSessionStats(siteIds);
+
+  const totalCapacity = sites.reduce((sum, s) => sum + (s.totalCapacity || 0), 0);
+  const totalOccupied = sites.reduce((sum, s) => sum + (s.occupied || 0), 0);
+  const totalAllottedSlots = sites.reduce((sum, s) => sum + (s.allotted_slots || 0), 0);
+  const primarySiteId = vendor.assignedSiteId ?? vendor.assigned_site_id;
+  const primarySite = primarySiteId
+    ? sites.find(s => (s._id || s.id) === primarySiteId) || await repo.findSiteById(primarySiteId)
+    : null;
+
+  return {
+    data: {
+      vendor:      formatVendorSummary(vendor),
+      primarySite: primarySite ? formatSite(primarySite) : null,
+      sites:       sites.map(formatSite),
+      stats: {
+        totalSites:         sites.length,
+        totalCapacity,
+        currentlyOccupied:  totalOccupied,
+        availableSlots:     Math.max(0, totalCapacity - totalOccupied),
+        totalAllottedSlots,
+        activeSessions:     sessionStats.activeSessions,
+        todayEntries:       sessionStats.todayEntries,
+        todayExits:         sessionStats.todayExits,
+      },
+    },
+    success: true,
+  };
+};
+
+module.exports = { listSites, createSite, updateSite, deleteSite, getStats, processRecharge, getRecentRecharges, getSiteDropdown, getVendorParkingDetails };

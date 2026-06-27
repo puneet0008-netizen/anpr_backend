@@ -1,0 +1,437 @@
+{
+  "info": {
+    "name": "Parking Sites Management",
+    "description": "Parking Sites Management APIs for **Admin** and **Vendor** roles.\n\n**Setup:**\n1. Set `baseUrl` to `http://localhost:3000/api/v1`\n2. Run **Login (Admin)** or **Login (Vendor)** — tokens auto-save\n3. Use the matching folder (Admin / Vendor) for requests\n\n**Endpoints:**\n- `GET /parking` — list sites (paginated)\n- `GET /parking/list` — dropdown\n- `POST /parking` — create site\n- `PATCH /parking/:id` — update site\n- `DELETE /parking/:id` — delete site\n- `GET /parking/stats` — dashboard stats\n- `POST /parking/recharge` — process wallet recharge\n- `GET /parking/recharge/recent` — recent recharges",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000/api/v1", "type": "string" },
+    { "key": "adminAccessToken", "value": "", "type": "string" },
+    { "key": "adminRefreshToken", "value": "", "type": "string" },
+    { "key": "vendorAccessToken", "value": "", "type": "string" },
+    { "key": "vendorRefreshToken", "value": "", "type": "string" },
+    { "key": "parkingSiteId", "value": "", "type": "string" },
+    { "key": "vendorId", "value": "", "type": "string" },
+    { "key": "userId", "value": "", "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "🔐 Auth",
+      "item": [
+        {
+          "name": "Login (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('adminAccessToken',  body.data.accessToken);",
+                  "  pm.collectionVariables.set('adminRefreshToken', body.data.refreshToken);",
+                  "  pm.test('Login successful', () => pm.expect(body.success).to.be.true);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"admin\",\n  \"password\": \"Admin@123456\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          }
+        },
+        {
+          "name": "Login (Vendor)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('vendorAccessToken',  body.data.accessToken);",
+                  "  pm.collectionVariables.set('vendorRefreshToken', body.data.refreshToken);",
+                  "  pm.test('Login successful', () => pm.expect(body.success).to.be.true);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"vendor@abcparking.com\",\n  \"password\": \"Vendor@123\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login",
+            "description": "Use the vendor account email as username (created via POST /vendors)."
+          }
+        },
+        {
+          "name": "Refresh Token (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('adminAccessToken',  body.data.accessToken);",
+                  "  pm.collectionVariables.set('adminRefreshToken', body.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{adminRefreshToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/refresh"
+          }
+        },
+        {
+          "name": "Refresh Token (Vendor)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  pm.collectionVariables.set('vendorAccessToken',  body.data.accessToken);",
+                  "  pm.collectionVariables.set('vendorRefreshToken', body.data.refreshToken);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{vendorRefreshToken}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/refresh"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🅿️ Parking Sites (Admin)",
+      "item": [
+        {
+          "name": "List Parking Sites",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/parking?page=1&limit=10&sortBy=createdAt&sortOrder=DESC",
+              "host": ["{{baseUrl}}"],
+              "path": ["parking"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "sortBy", "value": "createdAt", "description": "siteName | createdAt | status | totalCapacity" },
+                { "key": "sortOrder", "value": "DESC", "description": "ASC | DESC" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "status", "value": "active", "disabled": true, "description": "active | inactive" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Site Dropdown",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/parking/list"
+          }
+        },
+        {
+          "name": "Parking Stats",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/parking/stats"
+          }
+        },
+        {
+          "name": "Vendor Parking Details",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/parking/vendor-details?vendorId={{vendorId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["parking", "vendor-details"],
+              "query": [
+                { "key": "vendorId", "value": "{{vendorId}}", "description": "Required for admin" }
+              ]
+            },
+            "description": "Admin must pass vendorId. Returns vendor profile, primary site, all assigned sites, and parking stats."
+          }
+        },
+        {
+          "name": "Create Parking Site",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  const id = body.data?.id || body.data?._id;",
+                  "  if (id) pm.collectionVariables.set('parkingSiteId', id);",
+                  "  pm.test('Site created', () => pm.expect(body.success).to.be.true);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteName\": \"MG Road Parking\",\n  \"location\": \"MG Road, Bangalore\",\n  \"type\": \"multi-level\",\n  \"totalCapacity\": 200,\n  \"hourlyRate\": 30,\n  \"dailyRate\": 150,\n  \"monthlyRate\": 2500,\n  \"entryCameraIp\": \"192.168.1.101\",\n  \"exitCameraIp\": \"192.168.1.102\",\n  \"barrierControllerIp\": \"192.168.1.103\",\n  \"assignedVendorId\": \"{{vendorId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/parking",
+            "description": "Set assignedVendorId to a vendor UUID, or null. Saves parkingSiteId on success."
+          }
+        },
+        {
+          "name": "Update Parking Site",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteName\": \"MG Road Parking - Updated\",\n  \"location\": \"MG Road, Bangalore - 560001\",\n  \"totalCapacity\": 220,\n  \"hourlyRate\": 35,\n  \"dailyRate\": 180,\n  \"monthlyRate\": 2800,\n  \"status\": \"active\",\n  \"assignedVendorId\": \"{{vendorId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/parking/{{parkingSiteId}}"
+          }
+        },
+        {
+          "name": "Delete Parking Site",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "url": "{{baseUrl}}/parking/{{parkingSiteId}}"
+          }
+        },
+        {
+          "name": "Process Recharge",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"amount\": 500,\n  \"paymentMethod\": \"Cash\",\n  \"transactionRef\": \"RCG-20260427-001\"\n}"
+            },
+            "url": "{{baseUrl}}/parking/recharge",
+            "description": "Recharge wallet for an app user (userId = parking app user UUID)."
+          }
+        },
+        {
+          "name": "Recent Recharges",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{adminAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/parking/recharge/recent"
+          }
+        }
+      ]
+    },
+    {
+      "name": "🅿️ Parking Sites (Vendor)",
+      "item": [
+        {
+          "name": "List Parking Sites",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{vendorAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/parking?page=1&limit=10&sortBy=createdAt&sortOrder=DESC",
+              "host": ["{{baseUrl}}"],
+              "path": ["parking"],
+              "query": [
+                { "key": "page", "value": "1" },
+                { "key": "limit", "value": "10" },
+                { "key": "sortBy", "value": "createdAt" },
+                { "key": "sortOrder", "value": "DESC" },
+                { "key": "search", "value": "", "disabled": true },
+                { "key": "status", "value": "active", "disabled": true }
+              ]
+            }
+          }
+        },
+        {
+          "name": "Site Dropdown",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{vendorAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/parking/list"
+          }
+        },
+        {
+          "name": "Parking Stats",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{vendorAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/parking/stats"
+          }
+        },
+        {
+          "name": "Vendor Parking Details",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{vendorAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/parking/vendor-details",
+            "description": "Logged-in vendor ke assigned parking sites aur stats. vendorId ki zarurat nahi."
+          }
+        },
+        {
+          "name": "Create Parking Site",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "  const body = pm.response.json();",
+                  "  const id = body.data?.id || body.data?._id;",
+                  "  if (id) pm.collectionVariables.set('parkingSiteId', id);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{vendorAccessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteName\": \"Vendor Site - Koramangala\",\n  \"location\": \"Koramangala, Bangalore\",\n  \"type\": \"open\",\n  \"totalCapacity\": 80,\n  \"hourlyRate\": 25,\n  \"dailyRate\": 120,\n  \"monthlyRate\": 2000,\n  \"entryCameraIp\": \"192.168.2.101\",\n  \"exitCameraIp\": \"192.168.2.102\",\n  \"barrierControllerIp\": \"192.168.2.103\",\n  \"assignedVendorId\": \"{{vendorId}}\"\n}"
+            },
+            "url": "{{baseUrl}}/parking"
+          }
+        },
+        {
+          "name": "Update Parking Site",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{vendorAccessToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"siteName\": \"Vendor Site - Koramangala (Updated)\",\n  \"totalCapacity\": 90,\n  \"hourlyRate\": 30,\n  \"status\": \"active\"\n}"
+            },
+            "url": "{{baseUrl}}/parking/{{parkingSiteId}}"
+          }
+        },
+        {
+          "name": "Delete Parking Site",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{vendorAccessToken}}", "type": "string" }]
+            },
+            "method": "DELETE",
+            "url": "{{baseUrl}}/parking/{{parkingSiteId}}"
+          }
+        },
+        {
+          "name": "Process Recharge",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{vendorAccessToken}}", "type": "string" }]
+            },
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\",\n  \"amount\": 300,\n  \"paymentMethod\": \"UPI\",\n  \"transactionRef\": \"RCG-VND-20260427-001\"\n}"
+            },
+            "url": "{{baseUrl}}/parking/recharge"
+          }
+        },
+        {
+          "name": "Recent Recharges",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{vendorAccessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "url": "{{baseUrl}}/parking/recharge/recent"
+          }
+        }
+      ]
+    }
+  ]
+}
