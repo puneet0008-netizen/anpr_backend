@@ -9,6 +9,7 @@ const path         = require('path');
 
 const routes                     = require('./routes');
 const { setupSwagger }           = require('./config/swagger');
+const { getExpressCorsOptions }  = require('./config/cors');
 const { errorHandler, notFound } = require('./middlewares/error.middleware');
 const { apiLimiter }             = require('./middlewares/rateLimiter.middleware');
 const logger                     = require('./utils/logger');
@@ -18,11 +19,7 @@ const app = express();
 // ── Security ──────────────────────────────────────────────────────────────────
 app.use(helmet());
 
-const corsOptions = {
-  origin:         process.env.CORS_ORIGIN || '*',
-  methods:        ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
-};
+const corsOptions = getExpressCorsOptions();
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions)); // handle preflight for all routes
 

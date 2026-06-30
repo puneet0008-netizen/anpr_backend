@@ -6,17 +6,14 @@
  */
 const { Server } = require('socket.io');
 const { verifyAccessToken } = require('../utils/jwt');
+const { getSocketCorsOptions } = require('../config/cors');
 const logger = require('../utils/logger');
 
 let io = null;
 
 const initSocket = (httpServer) => {
   io = new Server(httpServer, {
-    cors: {
-      origin:      process.env.CORS_ORIGIN || '*',
-      methods:     ['GET', 'POST'],
-      credentials: true,
-    },
+    cors:        getSocketCorsOptions(),
     pingTimeout:  20000,
     pingInterval: 25000,
   });
