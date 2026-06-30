@@ -4,10 +4,33 @@ const { v4: uuidv4 } = require('uuid');
 const { localDayBounds } = require('../utils/dateWindow');
 const {
   inStatusQuery,
+  outStatusQuery,
   fetchActiveSessions,
   countActiveSessions,
   findActiveByPlate: findActiveByPlateLatest,
 } = require('../utils/parkingSessionStatus');
+
+const _buildUserPlatesFilter = (userId, plates = []) => {
+  const normalized = [...new Set(
+    plates.map((p) => String(p || '').replace(/\s/g, '').toUpperCase()).filter(Boolean),
+  )];
+  return {
+    $or: [
+      { userId },
+      ...(normalized.length ? [{ numberPlate: { $in: normalized } }] : []),
+    ],
+  };
+};
+
+/** Total IN / OUT parking events for a user (by userId + registered plates). */
+const countInOutForUser = async (userId, plates = []) => {
+  const filter = _buildUserPlatesFilter(userId, plates);
+  const [totalIn, totalOut] = await Promise.all([
+    ParkingSession.countDocuments({ ...filter, status: inStatusQuery() }),
+    ParkingSession.countDocuments({ ...filter, status: outStatusQuery() }),
+  ]);
+  return { totalIn, totalOut };
+};
 
 /**
  * Compute elapsed duration in minutes from entryTime to now (or exitTime).
@@ -35,15 +58,7 @@ const findByUser = async (userId, { limit = 10, offset = 0, date } = {}) => {
 
 /** Sessions for user + registered plates (same basis as admin recentSessions). */
 const findByUserPlates = async (userId, plates, { limit = 100, offset = 0, date } = {}) => {
-  const normalized = [...new Set(
-    plates.map((p) => String(p || '').replace(/\s/g, '').toUpperCase()).filter(Boolean),
-  )];
-  const filter = {
-    $or: [
-      { userId },
-      ...(normalized.length ? [{ numberPlate: { $in: normalized } }] : []),
-    ],
-  };
+  const filter = _buildUserPlatesFilter(userId, plates);
   if (date) {
     const { start, endExclusive } = localDayBounds(date);
     filter.entryTime = { $gte: start, $lt: endExclusive };
@@ -206,4 +221,5 @@ module.exports = {
   create,
   closeSession,
   findActiveByPlate,
+  countInOutForUser,
 };

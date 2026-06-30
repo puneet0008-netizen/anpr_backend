@@ -53,8 +53,7 @@ const getVehicles = async (userId) => {
     return _formatVehicle(row, carStatus)
   })
 
-  const totalIn  = vehicles.filter((v) => v.carStatus === 'IN').length
-  const totalOut = vehicles.filter((v) => v.carStatus === 'OUT').length
+  const { totalIn, totalOut } = await sessionsRepo.countInOutForUser(userId, plates)
 
   return { vehicles, totalIn, totalOut }
 }

@@ -46,8 +46,8 @@ router.use(appAuthenticate)
  *                           id: { type: string }
  *                           numberPlate: { type: string }
  *                           carStatus: { type: string, enum: [IN, OUT] }
- *                     totalIn: { type: integer, example: 1 }
- *                     totalOut: { type: integer, example: 2 }
+ *                     totalIn: { type: integer, description: Total IN parking events for this user, example: 12 }
+ *                     totalOut: { type: integer, description: Total OUT parking events for this user, example: 11 }
  */
 router.get('/', ctrl.list)
 
