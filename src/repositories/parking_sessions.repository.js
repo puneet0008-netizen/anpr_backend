@@ -1,22 +1,29 @@
 const ParkingSession = require('../models/parkingSessions.model');
 const ParkingUser    = require('../models/parkingUsers.model');
 const { v4: uuidv4 } = require('uuid');
+const { localDayBounds } = require('../utils/dateWindow');
+const {
+  inStatusQuery,
+  fetchActiveSessions,
+  countActiveSessions,
+  findActiveByPlate: findActiveByPlateLatest,
+} = require('../utils/parkingSessionStatus');
 
 /**
  * Compute elapsed duration in minutes from entryTime to now (or exitTime).
  */
 const _calcDuration = (doc) => {
+  if (doc.durationMinutes != null) return doc.durationMinutes;
   const end   = doc.exitTime || new Date();
   const start = doc.entryTime;
   return Math.round((end - start) / 60000);
 };
 
-const findByUser = async (userId, { limit = 10, offset = 0, startDate, endDate } = {}) => {
+const findByUser = async (userId, { limit = 10, offset = 0, date } = {}) => {
   const filter = { userId };
-  if (startDate || endDate) {
-    filter.entryTime = {};
-    if (startDate) filter.entryTime.$gte = new Date(startDate);
-    if (endDate)   filter.entryTime.$lte = new Date(endDate);
+  if (date) {
+    const { start, endExclusive } = localDayBounds(date);
+    filter.entryTime = { $gte: start, $lt: endExclusive };
   }
   const docs = await ParkingSession.find(filter)
     .sort({ entryTime: -1 })
@@ -24,6 +31,29 @@ const findByUser = async (userId, { limit = 10, offset = 0, startDate, endDate }
     .limit(limit)
     .lean();
   return docs.map(d => ({ ...d, duration_minutes_calc: _calcDuration(d) }));
+};
+
+/** Sessions for user + registered plates (same basis as admin recentSessions). */
+const findByUserPlates = async (userId, plates, { limit = 100, offset = 0, date } = {}) => {
+  const normalized = [...new Set(
+    plates.map((p) => String(p || '').replace(/\s/g, '').toUpperCase()).filter(Boolean),
+  )];
+  const filter = {
+    $or: [
+      { userId },
+      ...(normalized.length ? [{ numberPlate: { $in: normalized } }] : []),
+    ],
+  };
+  if (date) {
+    const { start, endExclusive } = localDayBounds(date);
+    filter.entryTime = { $gte: start, $lt: endExclusive };
+  }
+  const docs = await ParkingSession.find(filter)
+    .sort({ entryTime: -1 })
+    .skip(offset)
+    .limit(limit)
+    .lean();
+  return docs.map((d) => ({ ...d, duration_minutes_calc: _calcDuration(d) }));
 };
 
 const findTodayByUser = async (userId) => {
@@ -36,9 +66,7 @@ const findTodayByUser = async (userId) => {
 };
 
 const findActive = async () => {
-  const sessions = await ParkingSession.find({ status: 'active' })
-    .sort({ entryTime: -1 })
-    .lean();
+  const sessions = await fetchActiveSessions();
 
   const userIds = [...new Set(sessions.map(s => s.userId).filter(Boolean))];
   const users   = await ParkingUser.find({ _id: { $in: userIds } }, { name: 1, phone: 1 }).lean();
@@ -57,11 +85,23 @@ const getTodayStats = async () => {
   today.setHours(0, 0, 0, 0);
 
   const [totalInToday, totalOutToday, currentlyParked, durationAgg] = await Promise.all([
-    ParkingSession.countDocuments({ entryTime: { $gte: today } }),
-    ParkingSession.countDocuments({ exitTime: { $gte: today }, status: 'completed' }),
-    ParkingSession.countDocuments({ status: 'active' }),
+    ParkingSession.countDocuments({ status: inStatusQuery(), entryTime: { $gte: today } }),
+    ParkingSession.countDocuments({
+      $or: [
+        { status: 'OUT', entryTime: { $gte: today } },
+        { status: 'completed', exitTime: { $gte: today } },
+      ],
+    }),
+    countActiveSessions(),
     ParkingSession.aggregate([
-      { $match: { status: 'completed', entryTime: { $gte: today } } },
+      {
+        $match: {
+          $or: [
+            { status: 'OUT', entryTime: { $gte: today } },
+            { status: 'completed', entryTime: { $gte: today } },
+          ],
+        },
+      },
       { $group: { _id: null, avg: { $avg: '$durationMinutes' } } },
     ]),
   ]);
@@ -119,30 +159,45 @@ const create = async (d) => {
     vehicleName: d.vehicleName,
     vehicleModel:d.vehicleModel,
     vehicleType: d.vehicleType,
+    status:      'IN',
   });
   await doc.save();
   return doc.toObject();
 };
 
+/** Legacy helper — creates a separate OUT record linked to the IN session. */
 const closeSession = async (id) => {
+  const inSession = await ParkingSession.findById(id).lean();
+  if (!inSession) return null;
+
   const exitTime = new Date();
-  const session  = await ParkingSession.findById(id).lean();
-  if (!session) return null;
-  const durationMinutes = Math.round((exitTime - session.entryTime) / 60000);
-  const doc = await ParkingSession.findByIdAndUpdate(
-    id,
-    { $set: { exitTime, durationMinutes, status: 'completed' } },
-    { new: true }
-  ).lean();
-  return doc;
+  const durationMinutes = Math.round((exitTime - new Date(inSession.entryTime)) / 60000);
+
+  const doc = new ParkingSession({
+    _id:             uuidv4(),
+    numberPlate:     inSession.numberPlate,
+    vehicleId:       inSession.vehicleId,
+    userId:          inSession.userId,
+    siteId:          inSession.siteId,
+    vehicleName:     inSession.vehicleName,
+    vehicleModel:    inSession.vehicleModel,
+    vehicleType:     inSession.vehicleType,
+    isMonthly:       inSession.isMonthly,
+    linkedSessionId: inSession._id,
+    entryTime:       exitTime,
+    exitTime,
+    durationMinutes,
+    status:          'OUT',
+  });
+  await doc.save();
+  return doc.toObject();
 };
 
-const findActiveByPlate = async (plate) => {
-  return ParkingSession.findOne({ numberPlate: plate, status: 'active' }).lean();
-};
+const findActiveByPlate = async (plate) => findActiveByPlateLatest(plate);
 
 module.exports = {
   findByUser,
+  findByUserPlates,
   findTodayByUser,
   findActive,
   getTodayStats,

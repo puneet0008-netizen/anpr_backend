@@ -8,7 +8,7 @@ const db                = require('./config/database');
 const { getRedisClient } = require('./config/redis');
 const logger            = require('./utils/logger');
 
-const PORT = Number(process.env.PORT) || 3000;
+const PORT = Number(process.env.PORT) || 3001;
 
 const server = http.createServer(app);
 

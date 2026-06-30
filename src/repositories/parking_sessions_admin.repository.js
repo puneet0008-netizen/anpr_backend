@@ -2,8 +2,15 @@ const ParkingSession = require('../models/parkingSessions.model');
 const ParkingSite    = require('../models/parkingSites.model');
 const ParkingUser    = require('../models/parkingUsers.model');
 const { v4: uuidv4 } = require('uuid');
+const {
+  isInStatus,
+  resolveListStatusFilter,
+  fetchActiveSessions,
+  findActiveByPlate: findActiveByPlateLatest,
+} = require('../utils/parkingSessionStatus');
 
 const _calcDuration = (doc) => {
+  if (doc.durationMinutes != null) return doc.durationMinutes;
   const end   = doc.exitTime || new Date();
   const start = doc.entryTime;
   return Math.round((end - start) / 60000);
@@ -35,7 +42,8 @@ const listAll = async ({ numberPlate, userId, siteId, status, startDate, endDate
   if (numberPlate) filter.numberPlate = new RegExp(numberPlate, 'i');
   if (userId)      filter.userId      = userId;
   if (siteId)      filter.siteId      = siteId;
-  if (status)      filter.status      = status;
+  const statusFilter = resolveListStatusFilter(status);
+  if (statusFilter) filter.status = statusFilter;
   if (startDate)   { filter.entryTime = filter.entryTime || {}; filter.entryTime.$gte = new Date(startDate); }
   if (endDate)     { filter.entryTime = filter.entryTime || {}; filter.entryTime.$lte = new Date(endDate); }
 
@@ -67,52 +75,55 @@ const recordEntry = async ({
     entryPlateImageUrl: entryPlateImageUrl || null,
     entryCarImageUrl:   entryCarImageUrl   || null,
     entryTime:          new Date(),
-    status:             'active',
+    status:             'IN',
   });
   await doc.save();
-  // Increment site occupancy counter
   if (siteId) {
     await ParkingSite.findByIdAndUpdate(siteId, { $inc: { occupied: 1 } });
   }
   return doc.toObject();
 };
 
+/** Creates a separate OUT record; the IN record is left unchanged. */
 const recordExit = async (sessionId, { exitPlateImageUrl, exitCarImageUrl } = {}) => {
-  const exitTime = new Date();
-  const session  = await ParkingSession.findById(sessionId).lean();
-  if (!session || session.status !== 'active') return null;
+  const inSession = await ParkingSession.findById(sessionId).lean();
+  if (!inSession || !isInStatus(inSession.status)) return null;
 
-  const durationMinutes = Math.round((exitTime - session.entryTime) / 60000);
-  const update = {
+  const exitTime = new Date();
+  const durationMinutes = Math.round((exitTime - new Date(inSession.entryTime)) / 60000);
+
+  const doc = new ParkingSession({
+    _id:               uuidv4(),
+    numberPlate:       inSession.numberPlate,
+    parkingName:       inSession.parkingName || null,
+    vehicleId:         inSession.vehicleId || null,
+    userId:            inSession.userId || null,
+    siteId:            inSession.siteId || null,
+    vehicleName:       inSession.vehicleName || null,
+    vehicleModel:      inSession.vehicleModel || null,
+    vehicleType:       inSession.vehicleType || null,
+    isMonthly:         inSession.isMonthly === true,
+    linkedSessionId:   inSession._id,
+    exitPlateImageUrl: exitPlateImageUrl || null,
+    exitCarImageUrl:   exitCarImageUrl || null,
+    entryTime:         exitTime,
     exitTime,
     durationMinutes,
-    status: 'completed',
-  };
-  if (exitPlateImageUrl) update.exitPlateImageUrl = exitPlateImageUrl;
-  if (exitCarImageUrl)   update.exitCarImageUrl   = exitCarImageUrl;
+    status:            'OUT',
+  });
+  await doc.save();
 
-  const updated = await ParkingSession.findByIdAndUpdate(
-    sessionId,
-    { $set: update },
-    { new: true }
-  ).lean();
-
-  // Decrement site occupancy (floor at 0)
-  if (updated?.siteId) {
+  if (inSession.siteId) {
     await ParkingSite.findByIdAndUpdate(
-      updated.siteId,
-      [{ $set: { occupied: { $max: [0, { $subtract: ['$occupied', 1] }] } } }]
+      inSession.siteId,
+      [{ $set: { occupied: { $max: [0, { $subtract: ['$occupied', 1] }] } } }],
     );
   }
-  return updated;
+  return doc.toObject();
 };
 
 const findActiveByPlate = async (plate) => {
-  const session = await ParkingSession.findOne({
-    numberPlate: plate.toUpperCase(),
-    status: 'active',
-  }).sort({ entryTime: -1 }).lean();
-
+  const session = await findActiveByPlateLatest(plate);
   if (!session) return null;
 
   const user = session.userId
@@ -134,21 +145,19 @@ const findById = async (id) => {
 };
 
 const getActiveSessions = async () => {
-  const docs = await ParkingSession.find({ status: 'active' }).sort({ entryTime: -1 }).lean();
+  const docs = await fetchActiveSessions();
   return _enrichWithUser(docs);
 };
 
 const findActiveBySiteId = async (siteId) => {
-  const docs = await ParkingSession.find({ siteId, status: 'active' })
-    .sort({ entryTime: -1 })
-    .lean();
+  const docs = await fetchActiveSessions({ siteId });
   return _enrichWithUser(docs);
 };
 
 const findBySiteId = async (siteId, { status, startDate, endDate, limit = 50, offset = 0 } = {}) => {
   const filter = { siteId };
-  if (status === 'IN')  filter.status = 'active';
-  if (status === 'OUT') filter.status = 'completed';
+  const statusFilter = resolveListStatusFilter(status);
+  if (statusFilter) filter.status = statusFilter;
   if (startDate || endDate) {
     filter.entryTime = {};
     if (startDate) filter.entryTime.$gte = new Date(startDate);
@@ -163,4 +172,23 @@ const findBySiteId = async (siteId, { status, startDate, endDate, limit = 50, of
   return { rows, total };
 };
 
-module.exports = { listAll, recordEntry, recordExit, findActiveByPlate, findById, getActiveSessions, findActiveBySiteId, findBySiteId };
+const deleteById = async (id) => {
+  const session = await ParkingSession.findById(id).lean();
+  if (!session) return null;
+
+  await ParkingSession.findByIdAndDelete(id);
+
+  if (session.siteId && isInStatus(session.status)) {
+    const stillParked = await findActiveByPlateLatest(session.numberPlate);
+    if (!stillParked) {
+      await ParkingSite.findByIdAndUpdate(
+        session.siteId,
+        [{ $set: { occupied: { $max: [0, { $subtract: ['$occupied', 1] }] } } }],
+      );
+    }
+  }
+
+  return session;
+};
+
+module.exports = { listAll, recordEntry, recordExit, findActiveByPlate, findById, getActiveSessions, findActiveBySiteId, findBySiteId, deleteById };

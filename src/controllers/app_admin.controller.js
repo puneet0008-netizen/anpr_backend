@@ -1,5 +1,6 @@
 const requestsRepo  = require('../repositories/vehicle_requests.repository');
 const visitorsRepo  = require('../repositories/visitors.repository');
+const { buildInvitePayload } = require('../services/app_visitors.service');
 const sessionsRepo  = require('../repositories/parking_sessions.repository');
 const vehiclesRepo  = require('../repositories/app_vehicles.repository');
 const notifRepo     = require('../repositories/notifications.repository');
@@ -92,18 +93,24 @@ const listVisitors = async (req, res, next) => {
 
 const createVisitor = async (req, res, next) => {
   try {
-    const { invitedBy, visitorName, visitorPhone, visitorCarNumber, purpose, visitDate, visitTime, durationHours, durationMinutes } = req.body;
-    if (!visitorName || !visitorPhone || !visitorCarNumber || !visitDate || !visitTime) {
-      return res.status(400).json({ success: false, message: 'Missing required fields' });
+    const { invitedBy, ...input } = req.body;
+    const hasDateRange = input.fromDate && input.toDate && input.fromTime && input.toTime;
+    const hasLegacy = input.visitDate && input.visitTime;
+
+    if (!input.visitorName || !input.visitorPhone || (!hasDateRange && !hasLegacy)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Provide visitorName, visitorPhone, and either fromDate/toDate/fromTime/toTime or visitDate/visitTime',
+      });
     }
-    const visitor = await visitorsRepo.create({
-      invitedBy: invitedBy || null,
-      visitorName, visitorPhone, visitorCarNumber,
-      purpose: purpose || 'Visit',
-      visitDate, visitTime,
-      durationHours:   durationHours   ?? 1,
-      durationMinutes: durationMinutes ?? 0,
+
+    const payload = buildInvitePayload(invitedBy || null, {
+      ...input,
+      purpose: input.purpose || 'Visit',
     });
+    payload.invitedBy = invitedBy || null;
+
+    const visitor = await visitorsRepo.create(payload);
     res.status(201).json({ success: true, data: visitor });
   } catch (e) { next(e); }
 };

@@ -52,17 +52,37 @@ const rechargeSchema = Joi.object({
 
 // ─── Visitor ──────────────────────────────────────────────────────────────────
 
-const inviteVisitorSchema = Joi.object({
-  visitorName:      Joi.string().min(2).max(255).required(),
-  visitorPhone:     Joi.string().min(7).max(20).required(),
+const visitorTimePattern = /^\d{1,2}:\d{2}(:\d{2})?$/
+const visitorTimeMessage = { 'string.pattern.base': 'Time must be HH:MM or HH:MM:SS' }
+
+const inviteVisitorCommon = {
+  visitorName:  Joi.string().min(2).max(255).required(),
+  visitorPhone: Joi.string().min(7).max(20).required(),
+  purpose:      Joi.string().min(2).max(255).required(),
+}
+
+const inviteVisitorDateRangeSchema = Joi.object({
+  ...inviteVisitorCommon,
+  visitorCarNumber: Joi.string().max(50).allow('', null),
+  fromDate: Joi.string().isoDate().required(),
+  toDate:   Joi.string().isoDate().required(),
+  fromTime: Joi.string().pattern(visitorTimePattern).required().messages(visitorTimeMessage),
+  toTime:   Joi.string().pattern(visitorTimePattern).required().messages(visitorTimeMessage),
+})
+
+const inviteVisitorLegacySchema = Joi.object({
+  ...inviteVisitorCommon,
   visitorCarNumber: Joi.string().min(3).max(50).required(),
-  purpose:          Joi.string().min(2).max(255).required(),
-  visitDate:        Joi.string().isoDate().required(),
-  visitTime:        Joi.string().pattern(/^\d{2}:\d{2}(:\d{2})?$/).required()
-                      .messages({ 'string.pattern.base': 'visitTime must be HH:MM or HH:MM:SS' }),
-  durationHours:   Joi.number().integer().min(0).max(24).default(1),
+  visitDate: Joi.string().isoDate().required(),
+  visitTime: Joi.string().pattern(visitorTimePattern).required().messages(visitorTimeMessage),
+  durationHours:   Joi.number().integer().min(0).max(24 * 30).default(1),
   durationMinutes: Joi.number().integer().min(0).max(59).default(0),
 })
+
+const inviteVisitorSchema = Joi.alternatives().try(
+  inviteVisitorDateRangeSchema,
+  inviteVisitorLegacySchema,
+)
 
 const registerDeviceTokenSchema = Joi.object({
   token:    Joi.string().min(10).required(),

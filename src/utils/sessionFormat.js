@@ -1,6 +1,11 @@
+const IN_STATUSES = new Set(['IN', 'active']);
+const OUT_STATUSES = new Set(['OUT', 'completed']);
+
 const isSessionOut = (row) => {
-  const status = row.status ?? ((row.exitTime || row.exit_time) ? 'completed' : 'active');
-  return status === 'completed' || !!(row.exitTime || row.exit_time);
+  const status = row?.status;
+  if (status && OUT_STATUSES.has(status)) return true;
+  if (status && IN_STATUSES.has(status)) return false;
+  return !!(row?.exitTime || row?.exit_time);
 };
 
 const toSessionStatus = (row) => (isSessionOut(row) ? 'OUT' : 'IN');

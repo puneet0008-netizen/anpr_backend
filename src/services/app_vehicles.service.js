@@ -1,14 +1,62 @@
 const vehiclesRepo  = require('../repositories/app_vehicles.repository')
+const sessionsRepo  = require('../repositories/parking_sessions.repository')
 const requestsRepo  = require('../repositories/vehicle_requests.repository')
 const notifRepo     = require('../repositories/notifications.repository')
+const { toSessionStatus } = require('../utils/sessionFormat')
 const { getIO }     = require('../sockets')
 
 const err = (msg, code) => Object.assign(new Error(msg), { statusCode: code })
 
 // ─── List vehicles ────────────────────────────────────────────────────────────
 
+const _formatVehicle = (row, carStatus = 'OUT') => ({
+  id:           row._id || row.id,
+  userId:       row.userId,
+  numberPlate:  row.numberPlate,
+  vehicleType:  row.vehicleType,
+  vehicleName:  row.vehicleName,
+  vehicleModel: row.vehicleModel,
+  isPrimary:    row.isPrimary === true,
+  status:       row.status,
+  carStatus,
+  createdAt:    row.createdAt,
+  updatedAt:    row.updatedAt,
+})
+
+const _normPlate = (plate) => String(plate || '').replace(/\s/g, '').toUpperCase()
+
 const getVehicles = async (userId) => {
-  return vehiclesRepo.findByUser(userId)
+  const rows = await vehiclesRepo.findByUser(userId)
+  const plates = rows.map((r) => _normPlate(r.numberPlate)).filter(Boolean)
+
+  const sessions = plates.length
+    ? await sessionsRepo.findByUserPlates(userId, plates, { limit: 200 })
+    : await sessionsRepo.findByUser(userId, { limit: 200 })
+
+  const plateSet = new Set(plates)
+  const matched = sessions.filter((s) => {
+    const p = _normPlate(s.numberPlate)
+    return !plateSet.size || plateSet.has(p)
+  })
+
+  const latestByPlate = {}
+  for (const session of matched) {
+    const plate = _normPlate(session.numberPlate)
+    if (!plate || latestByPlate[plate]) continue
+    latestByPlate[plate] = session
+  }
+
+  const vehicles = rows.map((row) => {
+    const plate = _normPlate(row.numberPlate)
+    const latest = latestByPlate[plate]
+    const carStatus = latest ? toSessionStatus(latest) : 'OUT'
+    return _formatVehicle(row, carStatus)
+  })
+
+  const totalIn  = vehicles.filter((v) => v.carStatus === 'IN').length
+  const totalOut = vehicles.filter((v) => v.carStatus === 'OUT').length
+
+  return { vehicles, totalIn, totalOut }
 }
 
 // ─── Add vehicle ──────────────────────────────────────────────────────────────
@@ -28,7 +76,7 @@ const addVehicle = async (userId, { numberPlate, vehicleType, vehicleName, vehic
     title:   'Vehicle Added',
     message: `${vehicleName} (${numberPlate.toUpperCase()}) has been added to your account.`,
     type:    'vehicle_added',
-    data:    { vehicleId: vehicle.id, numberPlate: vehicle.number_plate },
+    data:    { vehicleId: vehicle._id ?? vehicle.id, numberPlate: _plate(vehicle) },
   })
   _pushNotif(userId, notif)
 
@@ -48,7 +96,7 @@ const requestPlateChange = async (userId, vehicleId, { newPlate, reason }) => {
     userId,
     vehicleId,
     requestType:    'plate_change',
-    currentValue:   vehicle.number_plate,
+    currentValue:   _plate(vehicle),
     requestedValue: newPlate.toUpperCase(),
     reason: reason || null,
   })
@@ -56,7 +104,7 @@ const requestPlateChange = async (userId, vehicleId, { newPlate, reason }) => {
   const notif = await notifRepo.create({
     userId,
     title:   'Plate Change Request Submitted',
-    message: `Your request to change plate from ${vehicle.number_plate} to ${newPlate.toUpperCase()} is under review.`,
+    message: `Your request to change plate from ${_plate(vehicle)} to ${newPlate.toUpperCase()} is under review.`,
     type:    'vehicle_request',
     data:    { requestId: request.id, requestType: 'plate_change' },
   })
@@ -77,7 +125,7 @@ const requestSlotSwap = async (userId, vehicleId, { requestedSlot, reason }) => 
     userId,
     vehicleId,
     requestType:    'slot_swap',
-    currentValue:   vehicle.number_plate,
+    currentValue:   _plate(vehicle),
     requestedValue: requestedSlot || 'Any available slot',
     reason: reason || null,
   })
@@ -85,7 +133,7 @@ const requestSlotSwap = async (userId, vehicleId, { requestedSlot, reason }) => 
   const notif = await notifRepo.create({
     userId,
     title:   'Slot Swap Request Submitted',
-    message: `Your slot swap request for ${vehicle.number_plate} is under review.`,
+    message: `Your slot swap request for ${_plate(vehicle)} is under review.`,
     type:    'vehicle_request',
     data:    { requestId: request.id, requestType: 'slot_swap' },
   })
@@ -105,7 +153,7 @@ const requestRemoveVehicle = async (userId, vehicleId, { reason }) => {
     userId,
     vehicleId,
     requestType:    'remove_vehicle',
-    currentValue:   vehicle.number_plate,
+    currentValue:   _plate(vehicle),
     requestedValue: 'remove',
     reason: reason || null,
   })
@@ -113,7 +161,7 @@ const requestRemoveVehicle = async (userId, vehicleId, { reason }) => {
   const notif = await notifRepo.create({
     userId,
     title:   'Vehicle Removal Request Submitted',
-    message: `Your request to remove ${vehicle.vehicle_name} (${vehicle.number_plate}) is under review.`,
+    message: `Your request to remove ${_vehicleName(vehicle)} (${_plate(vehicle)}) is under review.`,
     type:    'vehicle_request',
     data:    { requestId: request.id, requestType: 'remove_vehicle' },
   })
@@ -135,10 +183,14 @@ const getMyRequests = async (userId) => {
 const _ownedVehicle = async (userId, vehicleId) => {
   const vehicle = await vehiclesRepo.findById(vehicleId)
   if (!vehicle) throw err('Vehicle not found', 404)
-  if (vehicle.user_id !== userId) throw err('Access denied', 403)
+  const ownerId = vehicle.userId ?? vehicle.user_id
+  if (ownerId !== userId) throw err('Access denied', 403)
   if (vehicle.status === 'removed') throw err('Vehicle has already been removed', 400)
   return vehicle
 }
+
+const _plate = (vehicle) => vehicle.numberPlate ?? vehicle.number_plate ?? ''
+const _vehicleName = (vehicle) => vehicle.vehicleName ?? vehicle.vehicle_name ?? 'Vehicle'
 
 const _pushNotif = (userId, notif) => {
   try { getIO().to(`user:${userId}`).emit('notification:new', notif) } catch {}

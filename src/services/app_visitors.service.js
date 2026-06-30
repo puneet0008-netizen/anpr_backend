@@ -1,34 +1,48 @@
 const visitorsRepo = require('../repositories/visitors.repository')
 const notifRepo    = require('../repositories/notifications.repository')
 const { getIO }    = require('../sockets')
+const { resolveVisitorWindow } = require('../utils/visitorWindow')
 
 const err = (msg, code) => Object.assign(new Error(msg), { statusCode: code })
 
+const buildInvitePayload = (userId, input) => {
+  const window = resolveVisitorWindow(input)
+
+  return {
+    invitedBy:        userId,
+    visitorName:      input.visitorName,
+    visitorPhone:     input.visitorPhone,
+    visitorCarNumber: input.visitorCarNumber || '',
+    purpose:          input.purpose,
+    fromDate:         window.fromDate,
+    toDate:           window.toDate,
+    fromTime:         window.fromTime,
+    toTime:           window.toTime,
+    validFrom:        window.validFrom,
+    validUntil:       window.validUntil,
+    validityText:     window.validityText,
+    visitDate:        window.visitDate,
+    visitTime:        window.visitTime,
+    durationHours:    window.durationHours,
+    durationMinutes:  window.durationMinutes,
+  }
+}
+
 // ─── Invite visitor ───────────────────────────────────────────────────────────
 
-const inviteVisitor = async (userId, d) => {
-  const visitor = await visitorsRepo.create({
-    invitedBy:        userId,
-    visitorName:      d.visitorName,
-    visitorPhone:     d.visitorPhone,
-    visitorCarNumber: d.visitorCarNumber,
-    purpose:          d.purpose,
-    visitDate:        d.visitDate,
-    visitTime:        d.visitTime,
-    durationHours:    d.durationHours   || 1,
-    durationMinutes:  d.durationMinutes || 0,
-  })
+const inviteVisitor = async (userId, input) => {
+  const payload = buildInvitePayload(userId, input)
+  const visitor = await visitorsRepo.create(payload)
 
   const notif = await notifRepo.create({
     userId,
     title:   'Visitor Invited',
-    message: `${d.visitorName} has been invited. Tracking: ${visitor.tracking_number}`,
+    message: `${payload.visitorName} has been invited. Tracking: ${visitor.trackingNumber}`,
     type:    'visitor_invited',
-    data:    { visitorId: visitor.id, trackingNumber: visitor.tracking_number },
+    data:    { visitorId: visitor.id, trackingNumber: visitor.trackingNumber },
   })
   _push(userId, notif)
 
-  // Notify admin
   try { getIO().to('admin').emit('visitor:new', { visitor, invitedBy: userId }) } catch {}
 
   return visitor
@@ -51,12 +65,11 @@ const getByTracking = async (trackingNumber) => {
 // ─── Cancel visitor ───────────────────────────────────────────────────────────
 
 const cancelVisitor = async (userId, visitorId) => {
-  const { query } = require('../config/database')
-  const { rows } = await query(
-    `SELECT * FROM visitors WHERE id = $1 AND invited_by = $2`, [visitorId, userId]
-  )
-  if (!rows[0]) throw err('Visitor not found', 404)
-  if (rows[0].status === 'checked_in') throw err('Cannot cancel a visitor who has already checked in', 400)
+  const visitor = await visitorsRepo.findByIdAndUser(visitorId, userId)
+  if (!visitor) throw err('Visitor not found', 404)
+  if (visitor.status === 'checked_in') {
+    throw err('Cannot cancel a visitor who has already checked in', 400)
+  }
 
   return visitorsRepo.updateStatus(visitorId, 'cancelled')
 }
@@ -67,4 +80,4 @@ const _push = (userId, notif) => {
   try { getIO().to(`user:${userId}`).emit('notification:new', notif) } catch {}
 }
 
-module.exports = { inviteVisitor, getVisitors, getByTracking, cancelVisitor }
+module.exports = { inviteVisitor, getVisitors, getByTracking, cancelVisitor, buildInvitePayload }

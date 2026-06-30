@@ -18,7 +18,7 @@ router.use(appAuthenticate)
  * @swagger
  * /app/visitors:
  *   post:
- *     summary: Invite a visitor
+ *     summary: Invite a visitor (date range or legacy single-slot)
  *     tags: [App Visitors]
  *     security: [{ bearerAuth: [] }]
  *     requestBody:
@@ -26,20 +26,32 @@ router.use(appAuthenticate)
  *       content:
  *         application/json:
  *           schema:
- *             type: object
- *             required: [visitorName, visitorPhone, visitorCarNumber, purpose, visitDate, visitTime]
- *             properties:
- *               visitorName:      { type: string }
- *               visitorPhone:     { type: string }
- *               visitorCarNumber: { type: string }
- *               purpose:          { type: string }
- *               visitDate:        { type: string, format: date, example: '2026-04-25' }
- *               visitTime:        { type: string, example: '14:30' }
- *               durationHours:    { type: integer, default: 1 }
- *               durationMinutes:  { type: integer, default: 0 }
+ *             oneOf:
+ *               - type: object
+ *                 required: [visitorName, visitorPhone, purpose, fromDate, toDate, fromTime, toTime]
+ *                 properties:
+ *                   visitorName:      { type: string }
+ *                   visitorPhone:     { type: string }
+ *                   visitorCarNumber: { type: string, description: Optional vehicle number }
+ *                   purpose:          { type: string }
+ *                   fromDate:         { type: string, format: date, example: '2026-04-20' }
+ *                   toDate:           { type: string, format: date, example: '2026-04-22' }
+ *                   fromTime:         { type: string, example: '09:00' }
+ *                   toTime:           { type: string, example: '18:00' }
+ *               - type: object
+ *                 required: [visitorName, visitorPhone, visitorCarNumber, purpose, visitDate, visitTime]
+ *                 properties:
+ *                   visitorName:      { type: string }
+ *                   visitorPhone:     { type: string }
+ *                   visitorCarNumber: { type: string }
+ *                   purpose:          { type: string }
+ *                   visitDate:        { type: string, format: date, example: '2026-04-25' }
+ *                   visitTime:        { type: string, example: '14:30' }
+ *                   durationHours:    { type: integer, default: 1 }
+ *                   durationMinutes:  { type: integer, default: 0 }
  *     responses:
  *       201:
- *         description: Visitor invited – returns tracking number
+ *         description: Visitor invited – returns tracking number and validity window
  */
 router.post('/', validate(inviteVisitorSchema), ctrl.invite)
 

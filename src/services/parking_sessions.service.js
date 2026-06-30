@@ -5,7 +5,7 @@ const parkingRepo  = require('../repositories/parking.repository');
 const { saveBase64Image } = require('../utils/imageStorage');
 const { parsePagination, buildMeta } = require('../utils/pagination');
 const { cacheDel } = require('../config/redis');
-const { notifyParkingStatusForSession } = require('../sockets/parkingStatus');
+const { notifyParkingStatusForSession, notifyAppUserParkingStatus } = require('../sockets/parkingStatus');
 const { toSessionStatus, toParkingType, calcHourlyFee } = require('../utils/sessionFormat');
 const { toPublicImageUrl } = require('../utils/imageStorage');
 
@@ -140,7 +140,7 @@ const recordEntry = async (d) => {
   if (!session) throw err('Session not found or already completed', 404);
 
   await cacheDel('parking:stats');
-  const enriched = await repo.findById(sessionId);
+  const enriched = await repo.findById(session._id || session.id);
   await notifyParkingStatusForSession(enriched || session, 'OUT');
   return { data: formatSession(enriched || session), success: true };
 };
@@ -167,15 +167,9 @@ const recordExit = async (d) => {
   const session = await repo.recordExit(sessionId, exitImages);
   if (!session) throw err('Session not found or already completed', 404);
   await cacheDel('parking:stats');
-  const enriched = await repo.findById(sessionId);
+  const enriched = await repo.findById(session._id || session.id);
   await notifyParkingStatusForSession(enriched || session, 'OUT');
   return { data: formatSession(enriched || session), success: true };
-};
-
-const getSessionById = async (id) => {
-  const session = await repo.findById(id);
-  if (!session) throw err('Session not found', 404);
-  return { data: formatSession(session), success: true };
 };
 
 const lookupByPlate = async (plate) => {
@@ -214,4 +208,25 @@ const lookupByPlate = async (plate) => {
   };
 };
 
-module.exports = { listSessions, getActiveSessions, recordEntry, recordExit, getSessionById, lookupByPlate };
+const getSessionById = async (id) => {
+  const session = await repo.findById(id);
+  if (!session) throw err('Session not found', 404);
+  return { data: formatSession(session), success: true };
+};
+
+const deleteSession = async (id) => {
+  const session = await repo.deleteById(id);
+  if (!session) throw err('Session not found', 404);
+
+  await cacheDel('parking:stats');
+
+  if (session.userId) {
+    await notifyAppUserParkingStatus(session.userId);
+  } else if (session.numberPlate) {
+    await notifyParkingStatusForSession(session, 'OUT');
+  }
+
+  return { success: true, message: 'Parking session deleted' };
+};
+
+module.exports = { listSessions, getActiveSessions, recordEntry, recordExit, getSessionById, deleteSession, lookupByPlate };

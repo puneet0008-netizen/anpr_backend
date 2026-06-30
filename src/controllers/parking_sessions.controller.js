@@ -12,6 +12,12 @@ const entry = async (req, res, next) => {
   } catch (e) { next(e); }
 };
 const exit       = async (req, res, next) => { try { res.json(await svc.recordExit(req.body)); } catch (e) { next(e); } };
+const remove     = async (req, res, next) => {
+  try {
+    const result = await svc.deleteSession(req.params.id);
+    return sendSuccess(res, { message: result.message });
+  } catch (e) { next(e); }
+};
 const lookup     = async (req, res, next) => { try { res.json(await svc.lookupByPlate(req.query.plate)); } catch (e) { next(e); } };
 
-module.exports = { list, listActive, getById, entry, exit, lookup };
+module.exports = { list, listActive, getById, entry, exit, remove, lookup };

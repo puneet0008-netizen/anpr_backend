@@ -5,6 +5,7 @@ const ParkingWallet  = require('../models/parkingWallets.model');
 const ParkingRecharge= require('../models/parkingRecharges.model');
 const Vendor         = require('../models/vendors.model');
 const { v4: uuidv4 } = require('uuid');
+const { countActiveSessions } = require('../utils/parkingSessionStatus');
 
 // ─── Parking Sites ────────────────────────────────────────────────────────────
 
@@ -13,7 +14,7 @@ const { v4: uuidv4 } = require('uuid');
  */
 const _enrichSite = async (site) => {
   const [occupied, allottedResult, vendor] = await Promise.all([
-    ParkingSession.countDocuments({ siteId: site._id, status: 'active' }),
+    countActiveSessions({ siteId: site._id }),
     ParkingUser.aggregate([
       { $match: { assignedSiteId: site._id, status: 'active' } },
       { $group: { _id: null, total: { $sum: '$allottedSlots' } } },
@@ -110,7 +111,7 @@ const getStats = async () => {
         },
       },
     ]),
-    ParkingSession.countDocuments({ status: 'active' }),
+    countActiveSessions(),
     ParkingUser.aggregate([
       { $match: { assignedSiteId: { $ne: null }, status: 'active' } },
       { $group: { _id: null, total: { $sum: '$allottedSlots' } } },
@@ -198,9 +199,15 @@ const getVendorSessionStats = async (siteIds) => {
   today.setHours(0, 0, 0, 0);
 
   const [activeSessions, todayEntries, todayExits] = await Promise.all([
-    ParkingSession.countDocuments({ siteId: { $in: siteIds }, status: 'active' }),
-    ParkingSession.countDocuments({ siteId: { $in: siteIds }, entryTime: { $gte: today } }),
-    ParkingSession.countDocuments({ siteId: { $in: siteIds }, exitTime: { $gte: today }, status: 'completed' }),
+    countActiveSessions({ siteId: { $in: siteIds } }),
+    ParkingSession.countDocuments({ siteId: { $in: siteIds }, status: { $in: ['IN', 'active'] }, entryTime: { $gte: today } }),
+    ParkingSession.countDocuments({
+      siteId: { $in: siteIds },
+      $or: [
+        { status: 'OUT', entryTime: { $gte: today } },
+        { status: 'completed', exitTime: { $gte: today } },
+      ],
+    }),
   ]);
 
   return { activeSessions, todayEntries, todayExits };

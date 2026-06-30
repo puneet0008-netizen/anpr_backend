@@ -11,6 +11,7 @@ const ParkingSession = require('../models/parkingSessions.model');
 const ParkingUser    = require('../models/parkingUsers.model');
 const AppVehicle     = require('../models/appVehicles.model');
 const usersRepo      = require('../repositories/parking_users.repository');
+const { isInStatus } = require('../utils/parkingSessionStatus');
 const { getIO }      = require('./index');
 const logger         = require('../utils/logger');
 
@@ -35,6 +36,7 @@ const _sessionSummary = (session) => session ? {
 
 /**
  * Build current IN/OUT status for an app parking user.
+ * Uses the latest event per plate — parked only if that event is IN.
  */
 const buildParkingStatus = async (userId) => {
   const user = await ParkingUser.findById(userId).lean();
@@ -55,27 +57,32 @@ const buildParkingStatus = async (userId) => {
   const appVehicles = await AppVehicle.find({ userId, status: { $ne: 'removed' } }).lean();
   const plates      = _collectPlates(user, appVehicles);
 
-  const activeSessions = await ParkingSession.find({
-    status: 'active',
+  const recentSessions = await ParkingSession.find({
     $or: [
       { userId },
       ...(plates.length ? [{ numberPlate: { $in: plates } }] : []),
     ],
-  }).sort({ entryTime: -1 }).lean();
+  }).sort({ entryTime: -1, createdAt: -1 }).lean();
 
-  const sessionByPlate = {};
-  for (const s of activeSessions) {
-    sessionByPlate[s.numberPlate] = s;
+  const latestByPlate = {};
+  for (const s of recentSessions) {
+    const plate = s.numberPlate?.toUpperCase();
+    if (!plate || latestByPlate[plate]) continue;
+    latestByPlate[plate] = s;
   }
 
   const vehicles = plates.map((plate) => {
-    const session = sessionByPlate[plate];
+    const session = latestByPlate[plate];
+    const parked  = session && isInStatus(session.status);
     return {
       numberPlate: plate,
-      carStatus:   session ? 'IN' : 'OUT',
-      ...(session ? _sessionSummary(session) : {}),
+      carStatus:   parked ? 'IN' : 'OUT',
+      ...(parked ? _sessionSummary(session) : {}),
     };
   });
+
+  const activeSessions = Object.values(latestByPlate).filter((s) => isInStatus(s.status));
+  activeSessions.sort((a, b) => new Date(b.entryTime) - new Date(a.entryTime));
 
   const primarySession = activeSessions[0] || null;
   const isParked       = !!primarySession;

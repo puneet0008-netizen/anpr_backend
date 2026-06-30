@@ -23,9 +23,31 @@ router.use(appAuthenticate)
  * @swagger
  * /app/vehicles:
  *   get:
- *     summary: List user's vehicles
+ *     summary: List user's vehicles with live IN/OUT parking status
  *     tags: [App Vehicles]
  *     security: [{ bearerAuth: [] }]
+ *     responses:
+ *       200:
+ *         description: Vehicles with parking totals
+ *         content:
+ *           application/json:
+ *             schema:
+ *               type: object
+ *               properties:
+ *                 success: { type: boolean }
+ *                 data:
+ *                   type: object
+ *                   properties:
+ *                     vehicles:
+ *                       type: array
+ *                       items:
+ *                         type: object
+ *                         properties:
+ *                           id: { type: string }
+ *                           numberPlate: { type: string }
+ *                           carStatus: { type: string, enum: [IN, OUT] }
+ *                     totalIn: { type: integer, example: 1 }
+ *                     totalOut: { type: integer, example: 2 }
  */
 router.get('/', ctrl.list)
 

@@ -1,17 +1,32 @@
 const sessionsRepo = require('../repositories/parking_sessions.repository')
+const vehiclesRepo = require('../repositories/app_vehicles.repository')
 const { toSessionStatus, toParkingType } = require('../utils/sessionFormat')
+
+const _todayDateKey = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+}
+
+const _sessionsForUser = async (userId, opts) => {
+  const vehicles = await vehiclesRepo.findByUser(userId)
+  const plates = vehicles.map((row) => row.numberPlate).filter(Boolean)
+  if (plates.length) {
+    return sessionsRepo.findByUserPlates(userId, plates, opts)
+  }
+  return sessionsRepo.findByUser(userId, opts)
+}
 
 // ─── Parking history for user (with date filter) ──────────────────────────────
 
-const getHistory = async (userId, { limit = 20, offset = 0, startDate, endDate } = {}) => {
-  const rows = await sessionsRepo.findByUser(userId, { limit, offset, startDate, endDate })
+const getHistory = async (userId, { limit = 20, offset = 0, date } = {}) => {
+  const rows = await _sessionsForUser(userId, { limit, offset, date })
   return rows.map(formatSession)
 }
 
 // ─── Today's sessions ─────────────────────────────────────────────────────────
 
 const getTodaySessions = async (userId) => {
-  const rows = await sessionsRepo.findTodayByUser(userId)
+  const rows = await _sessionsForUser(userId, { limit: 100, date: _todayDateKey() })
   return rows.map(formatSession)
 }
 

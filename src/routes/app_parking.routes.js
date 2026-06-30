@@ -26,16 +26,15 @@ router.get('/today', ctrl.getTodaySessions)
  * @swagger
  * /app/parking/history:
  *   get:
- *     summary: Parking history (with optional date range)
+ *     summary: Parking history for a single date
  *     tags: [App Parking]
  *     security: [{ bearerAuth: [] }]
  *     parameters:
  *       - in: query
- *         name: startDate
- *         schema: { type: string, format: date-time }
- *       - in: query
- *         name: endDate
- *         schema: { type: string, format: date-time }
+ *         name: date
+ *         required: true
+ *         schema: { type: string, format: date, example: '2026-04-20' }
+ *         description: Calendar day (YYYY-MM-DD)
  *       - in: query
  *         name: limit
  *         schema: { type: integer, default: 20 }

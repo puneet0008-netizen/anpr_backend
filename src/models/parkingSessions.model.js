@@ -17,9 +17,10 @@ const schema = new Schema({
   entryTime:       { type: Date, default: Date.now },
   exitTime:        { type: Date },
   durationMinutes: { type: Number },
+  linkedSessionId: { type: String, ref: 'ParkingSession', default: null },
   fee:             { type: Number, default: 0 },
   isMonthly:       { type: Boolean, default: false },
-  status:          { type: String, default: 'active' },
+  status:          { type: String, default: 'IN' },
   createdAt:       { type: Date, default: Date.now },
 }, { _id: false, id: false, versionKey: false });
 
